@@ -80,20 +80,35 @@ export const translateReceipt = async (
       Task: Analyze this Japanese receipt image and create a structured "Categorized Expense Report".
       
       Rules for Extraction & Calculation:
-      1. **Date & Time (CRITICAL)**: 
-         - Identify the transaction date (YYYY-MM-DD).
-         - **EXTREMELY IMPORTANT**: You MUST identify the transaction time (HH:MM). 
-           - Look for "14:30", "19:00", "09:45", "PM 02:30".
-      2. **Exchange Rate (FIXED)**:
+      1. **Date (CRITICAL)**: 
+         - **Scan the entire image** (Header, Footer, near logos).
+         - Look for keywords: "日付", "年月日", "Date", "領収日".
+         - **Support Japanese Era**: 
+           - 'R6' or '令和6年' = 2024
+           - 'R7' or '令和7年' = 2025
+           - 'R5' or '令和5年' = 2023
+         - Format output as: "YYYY-MM-DD".
+      
+      2. **Time (CRITICAL)**:
+         - **You MUST identify the transaction time.**
+         - Look for patterns like "14:30", "19:00", "09:45", "PM 02:30".
+         - Look near the Date, or at the very bottom of the receipt (footer).
+         - If found, output as "HH:MM".
+         - If absolutely not found, estimate based on lighting or standard business hours (e.g. "12:00"), but try hard to find it.
+
+      3. **Exchange Rate (FIXED)**:
          - **DO NOT SEARCH THE WEB.**
          - Use the fixed exchange rate of: **${targetRate}**
          - Formula: JPY Price * ${targetRate} = TWD Price.
-      3. **Categories**: Sort items into categories: [精品香氛, 伴手禮, 美妝保養, 藥品保健, 食品調味, 零食雜貨, 服飾配件, 3C家電, 其他].
-      4. **Price Logic**:
+      
+      4. **Categories**: Sort items into categories: [精品香氛, 伴手禮, 美妝保養, 藥品保健, 食品調味, 零食雜貨, 服飾配件, 3C家電, 其他].
+      
+      5. **Price Logic**:
          - Extract the **Total Payment Amount** in JPY.
          - Extract the *actual paid amount* per item.
          - Convert ALL JPY amounts to TWD using the rate ${targetRate} (round to nearest integer).
-      5. **Translation (CRITICAL)**: 
+      
+      6. **Translation (CRITICAL)**: 
          - **field: name**: Translate product name to **Natural Taiwanese Mandarin (道地台灣繁體中文)**.
          - **field: originalName**: Keep the EXACT Japanese product name.
       
