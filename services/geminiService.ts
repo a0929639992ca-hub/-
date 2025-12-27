@@ -1,9 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { ReceiptAnalysis } from "../types";
 
-// Switched to 'gemini-3-flash-preview' to avoid 429 quotas on the previous model
-// and to enable Google Search capabilities.
-const MODEL_NAME = 'gemini-3-flash-preview';
+// User requested "Gemini Nano Banana", which maps to 'gemini-2.5-flash-image'
+const MODEL_NAME = 'gemini-2.5-flash-image';
 
 /**
  * Robustly extracts JSON from the model response.
@@ -27,7 +26,7 @@ const cleanJsonString = (text: string): string => {
  */
 async function retryWithBackoff<T>(
   operation: () => Promise<T>,
-  retries: number = 3,
+  retries: number = 2, // Reduced retries to avoid long waits on hard limits
   delay: number = 2000
 ): Promise<T> {
   try {
@@ -77,16 +76,17 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
          - Identify the transaction date (YYYY-MM-DD).
          - **EXTREMELY IMPORTANT**: You MUST identify the transaction time (HH:MM). 
            - Scan the entire receipt (top, bottom, near date) for patterns like "14:30", "19:00", "09:45", "PM 02:30".
-      2. **Exchange Rate (SEARCH)**:
-         - **STEP 1**: Identify the transaction date from the receipt.
-         - **STEP 2**: Use the **Google Search tool** to find the specific "Bank of Taiwan JPY to TWD Cash Selling Rate" (台灣銀行 日幣 現金賣出 匯率) for that date.
-         - **STEP 3**: Use the found rate for the 'exchangeRate' field. 
-         - If specific data isn't available, find the most recent rate.
+      2. **Exchange Rate**:
+         - Since you cannot browse the web, **ESTIMATE** the "Bank of Taiwan JPY to TWD Cash Selling Rate" based on the transaction date.
+         - Rule of thumb: 
+           - 2023-2024 average: 0.21 - 0.22
+           - 2025: Estimate around 0.215 unless you see date-specific evidence on the receipt.
+         - Use this rate to calculate TWD prices.
       3. **Categories**: Sort items into categories: [精品香氛, 伴手禮, 美妝保養, 藥品保健, 食品調味, 零食雜貨, 服飾配件, 3C家電, 其他].
       4. **Price Logic**:
          - Extract the **Total Payment Amount** in JPY (Sum of all items including tax/discounts).
          - Extract the *actual paid amount* per item.
-         - Convert the final JPY amounts to TWD using the searched exchange rate (round to nearest integer).
+         - Convert the final JPY amounts to TWD using your estimated rate (round to nearest integer).
       5. **Translation (CRITICAL)**: 
          - **field: name**: Translate the product name into **Natural Taiwanese Mandarin (道地台灣繁體中文)**.
            - Examples: '洗面乳', '優格', '洋芋片', '行動電源'.
@@ -134,9 +134,7 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
                 },
                 ],
             },
-            config: {
-                tools: [{ googleSearch: {} }], // Enable Google Search for exchange rates
-            }
+            // Note: 'gemini-2.5-flash-image' does not support tools (Google Search).
         });
     });
 
@@ -154,13 +152,6 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
       throw new Error("無法解析收據資料，請確保照片清晰並重試。");
     }
 
-    // Extract grounding URL if available (to attribute the exchange rate source)
-    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const webChunk = chunks.find(c => c.web?.uri);
-    if (webChunk && webChunk.web?.uri) {
-        result.sourceUrl = webChunk.web.uri;
-    }
-
     return result;
 
   } catch (error: any) {
@@ -168,7 +159,7 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
     
     // Provide a more user-friendly error message for quotas
     if (error?.status === 429 || error?.message?.includes('429')) {
-        throw new Error("目前使用人數過多 (429)，請稍後再試，或檢查您的 API Key 配額。");
+        throw new Error("目前使用人數過多 (429)，系統已降低解析度以節省流量。請稍後再試。");
     }
     
     throw error;
