@@ -26,5 +26,6 @@ export enum AppState {
   ANALYZING = 'ANALYZING',
   RESULT = 'RESULT',
   HISTORY = 'HISTORY',
+  STATS = 'STATS',
   ERROR = 'ERROR'
 }

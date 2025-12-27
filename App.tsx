@@ -3,10 +3,11 @@ import { CameraCapture } from './components/CameraCapture';
 import { ResultView } from './components/ResultView';
 import { LoadingScreen } from './components/LoadingScreen';
 import { HistoryList } from './components/HistoryList';
+import { StatsView } from './components/StatsView'; // Import StatsView
 import { translateReceipt } from './services/geminiService';
 import { saveReceiptToHistory, getHistory, deleteFromHistory } from './services/historyService';
 import { AppState, ReceiptAnalysis } from './types';
-import { ScrollText, Sparkles, History, Receipt, Calculator } from 'lucide-react';
+import { ScrollText, Sparkles, History, Receipt, Calculator, PieChart, ScanLine, ShoppingBag } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
@@ -15,7 +16,7 @@ const App: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [historyList, setHistoryList] = useState<ReceiptAnalysis[]>([]);
   
-  // Manual Exchange Rate State (Default empty, logic will default to 0.25)
+  // Manual Exchange Rate State
   const [customRate, setCustomRate] = useState<string>('');
 
   useEffect(() => {
@@ -30,7 +31,6 @@ const App: React.FC = () => {
     try {
       const base64Data = imageData.split(',')[1];
       
-      // Parse custom rate, default to undefined (service will handle 0.25 default)
       let rateToSend: number | undefined = undefined;
       const parsedRate = parseFloat(customRate);
       if (!isNaN(parsedRate) && parsedRate > 0) {
@@ -55,11 +55,6 @@ const App: React.FC = () => {
     }
   }, [customRate]);
 
-  const openHistory = () => {
-    setHistoryList(getHistory());
-    setAppState(AppState.HISTORY);
-  };
-
   const selectHistoryItem = (item: ReceiptAnalysis) => {
     setReceiptData(item);
     setCapturedImage(null);
@@ -70,70 +65,56 @@ const App: React.FC = () => {
     const updated = deleteFromHistory(id);
     setHistoryList(updated);
     if (receiptData && receiptData.id === id) {
+        // If deleting from result view, go back to history
         setAppState(AppState.HISTORY);
     }
   };
 
-  // Calculate total spent for IDLE screen
+  // Check if we should show the bottom nav
+  const showBottomNav = [AppState.IDLE, AppState.HISTORY, AppState.STATS, AppState.ERROR].includes(appState);
+
+  // Calculate current trip total for header
   const totalSpent = historyList.reduce((sum, item) => sum + item.totalTwd, 0);
 
   return (
-    <div className="min-h-screen bg-[#FDFDFD] text-slate-900 pb-10 font-sans relative">
+    <div className="min-h-screen bg-[#FDFDFD] text-slate-900 font-sans relative">
       {/* Background Pattern */}
       <div className="absolute inset-0 opacity-40 pointer-events-none" style={{
           backgroundImage: 'radial-gradient(#CBD5E1 1px, transparent 1px)',
           backgroundSize: '24px 24px'
       }}></div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-40 w-full backdrop-blur-sm bg-[#FDFDFD]/80 border-b border-slate-100">
-        <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
-          <div 
-            className="flex items-center gap-2 cursor-pointer group" 
-            onClick={() => setAppState(AppState.IDLE)}
-          >
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-200">
-               <span className="font-bold text-lg">J</span>
+      {/* Header (Only show on Main Tabs) */}
+      {showBottomNav && (
+        <header className="sticky top-0 z-40 w-full backdrop-blur-sm bg-[#FDFDFD]/80 border-b border-slate-100">
+            <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-200">
+                    <span className="font-bold text-lg">J</span>
+                </div>
+                <div className="flex flex-col leading-none">
+                    <h1 className="text-base font-bold text-slate-800">
+                        日本購物<span className="text-indigo-600">記帳</span>
+                    </h1>
+                </div>
             </div>
-            <div className="flex flex-col leading-none">
-              <h1 className="text-base font-bold text-slate-800">
-                日本購物<span className="text-indigo-600">記帳</span>
-              </h1>
+            
+            {/* Total Budget Pill */}
+            <div className="flex items-center gap-2 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
+                <ShoppingBag className="w-3 h-3 text-slate-500" />
+                <span className="text-xs font-bold text-slate-700 font-mono">NT$ {totalSpent.toLocaleString()}</span>
             </div>
-          </div>
-          
-          <button 
-              onClick={openHistory}
-              className="p-2 text-slate-500 hover:text-indigo-600 transition-colors relative"
-          >
-              <History className="w-5 h-5" />
-              {historyList.length > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-              )}
-          </button>
-        </div>
-      </header>
+            </div>
+        </header>
+      )}
 
       {/* Main Content Area */}
-      <main className="max-w-md mx-auto px-4 py-6 relative z-10">
+      <main className="max-w-md mx-auto relative z-10 pb-24">
         
-        {/* State: IDLE or ERROR (Show Camera) */}
+        {/* State: IDLE / ERROR (Scan Tab) */}
         {(appState === AppState.IDLE || appState === AppState.ERROR) && (
-          <div className="flex flex-col gap-5 animate-in fade-in duration-500">
+          <div className="px-4 py-6 flex flex-col gap-5 animate-in fade-in duration-300">
             
-            {/* Summary Mini Card */}
-            {historyList.length > 0 && (
-                <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-center justify-between">
-                    <div>
-                        <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Current Trip Total</p>
-                        <p className="text-2xl font-bold text-slate-800 font-mono mt-0.5">NT$ {totalSpent.toLocaleString()}</p>
-                    </div>
-                    <div className="h-10 w-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-500">
-                        <Receipt className="w-5 h-5" />
-                    </div>
-                </div>
-            )}
-
             {/* Exchange Rate Setting */}
             <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 shadow-sm">
                 <div className="p-2 bg-slate-100 rounded-lg text-slate-500">
@@ -185,39 +166,78 @@ const App: React.FC = () => {
 
         {/* State: HISTORY */}
         {appState === AppState.HISTORY && (
-            <HistoryList 
-                history={historyList}
-                onSelect={selectHistoryItem}
-                onUpdateHistory={setHistoryList}
-                onBack={() => setAppState(AppState.IDLE)}
-            />
+            <div className="py-6 px-2">
+                <HistoryList 
+                    history={historyList}
+                    onSelect={selectHistoryItem}
+                    onUpdateHistory={setHistoryList}
+                    onBack={() => setAppState(AppState.IDLE)}
+                />
+            </div>
         )}
 
-        {/* State: ANALYZING */}
+        {/* State: STATS (New) */}
+        {appState === AppState.STATS && (
+            <div className="py-6">
+                <StatsView history={historyList} />
+            </div>
+        )}
+
+        {/* State: ANALYZING (Overlay) */}
         {appState === AppState.ANALYZING && (
           <LoadingScreen />
         )}
 
-        {/* State: RESULT */}
+        {/* State: RESULT (Overlay) */}
         {appState === AppState.RESULT && receiptData && (
-          <ResultView 
-            originalImage={capturedImage}
-            data={receiptData} 
-            onRetake={() => {
-                if (capturedImage) {
-                    if(confirm("返回後將清除本次掃描畫面（資料已自動儲存）。確定返回嗎？")) {
-                        setAppState(AppState.IDLE);
-                        setCapturedImage(null);
-                        setReceiptData(null);
-                    }
-                } else {
-                    setAppState(AppState.HISTORY);
-                }
-            }}
-            onDelete={deleteHistoryItem}
-          />
+            <div className="fixed inset-0 z-50 bg-[#FDFDFD] overflow-y-auto">
+                 <div className="max-w-md mx-auto pt-2 px-4">
+                    <ResultView 
+                        originalImage={capturedImage}
+                        data={receiptData} 
+                        onRetake={() => {
+                            if (capturedImage) {
+                                if(confirm("返回後將清除本次掃描畫面（資料已自動儲存）。確定返回嗎？")) {
+                                    setAppState(AppState.IDLE);
+                                    setCapturedImage(null);
+                                    setReceiptData(null);
+                                }
+                            } else {
+                                setAppState(AppState.HISTORY);
+                            }
+                        }}
+                        onDelete={deleteHistoryItem}
+                    />
+                </div>
+            </div>
         )}
       </main>
+
+      {/* Bottom Navigation Bar */}
+      {showBottomNav && (
+        <div className="fixed bottom-0 left-0 w-full z-40 bg-white border-t border-slate-200 pb-safe">
+            <div className="max-w-md mx-auto flex justify-around items-center">
+                <NavButton 
+                    active={appState === AppState.IDLE || appState === AppState.ERROR} 
+                    onClick={() => setAppState(AppState.IDLE)} 
+                    icon={ScanLine} 
+                    label="掃描" 
+                />
+                <NavButton 
+                    active={appState === AppState.HISTORY} 
+                    onClick={() => setAppState(AppState.HISTORY)} 
+                    icon={History} 
+                    label="紀錄" 
+                />
+                <NavButton 
+                    active={appState === AppState.STATS} 
+                    onClick={() => setAppState(AppState.STATS)} 
+                    icon={PieChart} 
+                    label="統計" 
+                />
+            </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -230,6 +250,20 @@ const FeatureCard = ({ icon, title, desc }: { icon: React.ReactNode, title: stri
         </div>
         <p className="text-xs text-slate-400 leading-relaxed">{desc}</p>
     </div>
+);
+
+const NavButton = ({ active, onClick, icon: Icon, label }: { active: boolean, onClick: () => void, icon: any, label: string }) => (
+    <button 
+        onClick={onClick}
+        className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-colors ${
+            active ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'
+        }`}
+    >
+        <div className={`p-1 rounded-full ${active ? 'bg-indigo-50' : 'bg-transparent'}`}>
+            <Icon className={`w-6 h-6 ${active ? 'fill-current' : 'stroke-current'}`} strokeWidth={active ? 0 : 2} />
+        </div>
+        <span className="text-[10px] font-bold tracking-wide">{label}</span>
+    </button>
 );
 
 export default App;
