@@ -45,10 +45,11 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
       // Create a small delay to ensure UI updates are processed
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      const blob = await toBlob(contentRef.current, {
+      // Cast options to any to avoid TypeScript error with onClone which is supported but sometimes missing in types
+      const options: any = {
         cacheBust: true,
         backgroundColor: '#f8fafc', // slate-50
-        filter: (node) => {
+        filter: (node: any) => {
           // Exclude elements marked with data-hide-on-save (like buttons)
           if (node instanceof HTMLElement && node.hasAttribute('data-hide-on-save')) {
             return false;
@@ -56,7 +57,7 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
           return true;
         },
         // IMPORTANT: Reveal the hidden footer in the generated image
-        onClone: (clonedNode) => {
+        onClone: (clonedNode: any) => {
           const node = clonedNode as HTMLElement;
           const footer = node.querySelector('#receipt-footer-image') as HTMLElement;
           if (footer) {
@@ -64,7 +65,9 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
              footer.classList.remove('hidden');
           }
         }
-      });
+      };
+
+      const blob = await toBlob(contentRef.current, options);
 
       if (!blob) throw new Error('Image generation failed');
 
