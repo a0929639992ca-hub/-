@@ -199,19 +199,7 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
                         </p>
                     </div>
                  )}
-                 {/* Source Link */}
-                 {data.sourceUrl && (
-                    <a 
-                        href={data.sourceUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-600 transition-colors"
-                        data-hide-on-save="true"
-                    >
-                        <ExternalLink className="w-3 h-3" />
-                        <span>匯率來源: 台灣銀行 (Search)</span>
-                    </a>
-                 )}
+                 {/* Source URL display removed as search is disabled for Nano Banana */}
              </div>
           </div>
 

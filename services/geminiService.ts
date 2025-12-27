@@ -1,7 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { ReceiptAnalysis } from "../types";
 
-const MODEL_NAME = 'gemini-3-flash-preview';
+// User requested "Gemini Nano Banana", which maps to 'gemini-2.5-flash-image'
+const MODEL_NAME = 'gemini-2.5-flash-image';
 
 /**
  * Robustly extracts JSON from the model response.
@@ -44,20 +45,19 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
       Task: Analyze this Japanese receipt image and create a structured "Categorized Expense Report".
       
       Rules for Extraction & Calculation:
-      1. **Date & Time**: 
+      1. **Date & Time (CRITICAL)**: 
          - Identify the transaction date (YYYY-MM-DD).
-         - **CRITICAL**: Identify the transaction time (HH:MM). Look for patterns like "14:30", "19:00".
-      2. **Exchange Rate (SEARCH REQUIRED)**:
-         - **STEP 1**: Identify the transaction date from the receipt.
-         - **STEP 2**: Use the **Google Search tool** to find the specific "Bank of Taiwan JPY to TWD Cash Selling Rate" (台灣銀行 日幣 現金賣出 匯率) for that date.
-         - **STEP 3**: Use the found rate for the 'exchangeRate' field. 
-         - If the date is today or very recent and specific data isn't available yet, find the most recent closing rate.
-         - If search fails completely, fallback to 0.22.
+         - **EXTREMELY IMPORTANT**: You MUST identify the transaction time (HH:MM). 
+           - Scan the entire receipt (top, bottom, near date) for patterns like "14:30", "19:00", "09:45", "PM 02:30".
+           - It is rarely missing. Look closely.
+      2. **Exchange Rate**:
+         - Estimate the JPY to TWD exchange rate based on the date.
+         - Use **0.215** as a generic baseline if unknown, or adjust slightly based on historical trends for that date if you know them.
       3. **Categories**: Sort items into categories: [精品香氛, 伴手禮, 美妝保養, 藥品保健, 食品調味, 零食雜貨, 服飾配件, 3C家電, 其他].
       4. **Price Logic**:
          - Extract the **Total Payment Amount** in JPY (Sum of all items including tax/discounts).
          - Extract the *actual paid amount* per item.
-         - Convert the final JPY amounts to TWD using the searched exchange rate (round to nearest integer).
+         - Convert the final JPY amounts to TWD using your estimated exchange rate (round to nearest integer).
       5. **Translation (CRITICAL)**: 
          - **field: name**: Translate the product name into **Natural Taiwanese Mandarin (道地台灣繁體中文)**.
            - Examples: '洗面乳', '優格', '洋芋片', '行動電源'.
@@ -103,10 +103,8 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
           },
         ],
       },
-      config: {
-        tools: [{ googleSearch: {} }], // Enable Google Search for exchange rates
-        thinkingConfig: { thinkingBudget: 0 },
-      }
+      // Note: 'gemini-2.5-flash-image' does not support responseSchema, responseMimeType, or tools (Google Search).
+      // We rely on prompt engineering for JSON output.
     });
 
     const text = cleanJsonString(response.text || "");
@@ -121,13 +119,6 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
     } catch (parseError) {
       console.error("JSON Parse Error:", parseError, "Text received:", text);
       throw new Error("無法解析收據資料，請確保照片清晰並重試。");
-    }
-
-    // Extract grounding URL if available (to attribute the exchange rate source)
-    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const webChunk = chunks.find(c => c.web?.uri);
-    if (webChunk && webChunk.web?.uri) {
-        result.sourceUrl = webChunk.web.uri;
     }
 
     return result;

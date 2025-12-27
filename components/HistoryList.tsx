@@ -65,7 +65,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
                               {record.date.slice(5)}
                           </span>
                            {record.time && (
-                            <span className="text-xs font-medium text-slate-400 font-mono flex items-center gap-0.5">
+                            <span className="text-xs font-medium text-slate-500 font-mono flex items-center gap-0.5">
                                 <Clock className="w-3 h-3" />
                                 {record.time}
                             </span>
