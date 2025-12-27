@@ -92,8 +92,8 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture }) => {
 
   // Image resizing logic to speed up API processing
   const processAndCaptureImage = (source: HTMLVideoElement | HTMLImageElement) => {
-    // Reduced from 1600 to 1024 to save tokens and avoid 429 Quota errors
-    const MAX_DIMENSION = 1024; 
+    // Aggressively reduced to 800px to minimize token usage and avoid 429 Quota errors
+    const MAX_DIMENSION = 800; 
     let width = source instanceof HTMLVideoElement ? source.videoWidth : source.width;
     let height = source instanceof HTMLVideoElement ? source.videoHeight : source.height;
 
