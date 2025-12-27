@@ -158,10 +158,19 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
 
       {/* Summary Card */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-indigo-100 mb-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Total TWD */}
         <div className="flex flex-col gap-1">
            <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">總金額 (TWD)</span>
            <span className="text-2xl font-bold text-slate-900">NT$ {data.totalTwd.toLocaleString()}</span>
         </div>
+        
+        {/* Total JPY (New) */}
+        <div className="flex flex-col gap-1">
+           <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">總金額 (JPY)</span>
+           <span className="text-xl font-bold text-slate-700 font-mono">¥ {data.totalJpy?.toLocaleString() ?? '-'}</span>
+        </div>
+
+        {/* Date & Time */}
         <div className="flex flex-col gap-1">
            <span className="text-xs text-slate-500 uppercase font-bold tracking-wider flex items-center gap-1">
              <Calendar className="w-3 h-3" /> 消費時間
@@ -171,17 +180,13 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
               {data.time && <span className="text-sm text-slate-400 font-medium mt-1">{data.time}</span>}
            </div>
         </div>
+
+        {/* Exchange Rate */}
         <div className="flex flex-col gap-1">
            <span className="text-xs text-slate-500 uppercase font-bold tracking-wider flex items-center gap-1">
              <TrendingUp className="w-3 h-3" /> 匯率
            </span>
            <span className="text-lg font-medium text-slate-700">{data.exchangeRate}</span>
-        </div>
-        <div className="flex flex-col gap-1">
-           <span className="text-xs text-slate-500 uppercase font-bold tracking-wider flex items-center gap-1">
-             <Calculator className="w-3 h-3" /> 商品項目
-           </span>
-           <span className="text-lg font-medium text-slate-700">{data.items.length} 筆</span>
         </div>
       </div>
 

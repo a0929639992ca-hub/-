@@ -13,9 +13,10 @@ export interface ReceiptAnalysis {
   timestamp?: number;    // 建立時間 (儲存用)
   exchangeRate: number;  // 匯率
   date: string;          // 日期
-  time?: string;         // 購物時間 (e.g. 14:30) - Added
-  items: ReceiptItem[];  // 商品列表
+  time?: string;         // 購物時間 (e.g. 14:30)
   totalTwd: number;      // 總台幣
+  totalJpy?: number;     // 總日幣 (Added, optional for backward compatibility)
+  items: ReceiptItem[];  // 商品列表
 }
 
 export enum AppState {

@@ -43,10 +43,11 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
          - Estimate the JPY to TWD exchange rate for that date (e.g., approx 0.21~0.23). If unsure, use 0.22.
       2. **Categories**: Sort items into categories: [精品香氛, 伴手禮, 美妝保養, 藥品保健, 食品調味, 零食雜貨, 服飾配件, 3C家電, 其他].
       3. **Price Logic**:
+         - Extract the **Total Payment Amount** in JPY (Sum of all items including tax/discounts as shown on receipt).
          - Extract the *actual paid amount* per item.
          - If Tax-Free (免稅), use the tax-free price.
          - If discounted (e.g., 10% OFF), calculate the final price.
-         - Convert the final JPY amount to TWD (round to nearest integer).
+         - Convert the final JPY amounts to TWD (round to nearest integer).
       4. **Multi-pack Logic**: If an item is a set (e.g., "3 items for ¥1000" or quantity > 1), calculate the *average cost per unit* in TWD and note it in the 'note' field.
       5. **Translation (CRITICAL)**: 
          - **field: name**: Translate the product name into **Natural Taiwanese Mandarin (道地台灣繁體中文)**.
@@ -60,7 +61,8 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
       - exchangeRate: number (the rate used)
       - date: string (YYYY-MM-DD)
       - time: string (HH:MM, or empty string if not found)
-      - totalTwd: number (sum of all items in TWD)
+      - totalJpy: number (Total amount on receipt in JPY)
+      - totalTwd: number (Total amount calculated in TWD)
       - items: Array of objects:
         - category: string
         - store: string (Store name detected from top of receipt)
@@ -95,6 +97,7 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
             exchangeRate: { type: Type.NUMBER },
             date: { type: Type.STRING },
             time: { type: Type.STRING },
+            totalJpy: { type: Type.NUMBER },
             totalTwd: { type: Type.NUMBER },
             items: {
               type: Type.ARRAY,
@@ -113,7 +116,7 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
               }
             }
           },
-          required: ["exchangeRate", "date", "totalTwd", "items"]
+          required: ["exchangeRate", "date", "totalJpy", "totalTwd", "items"]
         },
       }
     });

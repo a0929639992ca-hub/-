@@ -104,8 +104,16 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
                    <Store className="w-4 h-4 text-indigo-400" />
                    {getStoreName(record)}
                 </div>
-                <div className="text-2xl font-bold text-slate-900 font-mono">
-                  NT$ {record.totalTwd.toLocaleString()}
+                <div className="flex items-end gap-2">
+                  <div className="text-2xl font-bold text-slate-900 font-mono">
+                    NT$ {record.totalTwd.toLocaleString()}
+                  </div>
+                  {/* Show JPY total if available */}
+                  {record.totalJpy && (
+                    <div className="text-sm font-medium text-slate-400 font-mono mb-1">
+                      (¥ {record.totalJpy.toLocaleString()})
+                    </div>
+                  )}
                 </div>
               </div>
 
