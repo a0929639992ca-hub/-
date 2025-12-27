@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useCallback } from 'react';
-import { ArrowLeft, Receipt, Calculator, Calendar, Download, Loader2, Trash2, Clock, MapPin, JapaneseYen } from 'lucide-react';
+import { ArrowLeft, Receipt, Calendar, Download, Loader2, Trash2, Clock } from 'lucide-react';
 import { ReceiptAnalysis, ReceiptItem } from '../types';
 import { toBlob } from 'html-to-image';
 
@@ -14,6 +14,13 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
   const contentRef = useRef<HTMLDivElement>(null);
   const [isSaving, setIsSaving] = React.useState(false);
   
+  // Extract Store Name logic
+  const storeName = useMemo(() => {
+    // Find the first valid store name that isn't "Unknown" or generic
+    const validItem = data.items.find(i => i.store && i.store !== '未知' && i.store !== 'Store');
+    return validItem ? validItem.store : 'JAPAN SHOPPING';
+  }, [data.items]);
+
   // Group items by category
   const groupedItems = useMemo(() => {
     const groups: Record<string, ReceiptItem[]> = {};
@@ -46,12 +53,18 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
 
       const options: any = {
         cacheBust: true,
-        backgroundColor: 'transparent', // Make background transparent so the jagged edge works
-        width: contentRef.current.scrollWidth,
+        // Using a solid visible gray background to ensure contrast against the white receipt paper
+        backgroundColor: '#cbd5e1', 
+        // Add padding so the receipt sits nicely "on the table" (the gray background)
         style: {
            margin: '0',
-           transform: 'none' // Prevent scaling issues
+           padding: '40px', 
+           transform: 'none' 
         },
+        // Adjust width/height to account for the padding added above
+        width: contentRef.current.scrollWidth + 80, 
+        height: contentRef.current.scrollHeight + 80, 
+
         filter: (node: any) => {
           if (node instanceof HTMLElement && node.hasAttribute('data-hide-on-save')) {
             return false;
@@ -60,9 +73,9 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
         },
         onClone: (clonedNode: any) => {
           const node = clonedNode as HTMLElement;
-          // Ensure container keeps its white background
+          // Ensure the receipt paper itself stays white
           node.style.backgroundColor = '#ffffff';
-          node.style.boxShadow = 'none';
+          node.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.2)'; // Add a baked-in shadow for depth
           
           const footer = node.querySelector('#receipt-footer-image') as HTMLElement;
           if (footer) {
@@ -83,7 +96,7 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
         try {
           await navigator.share({
             files: [file],
-            title: '日本購物明細',
+            title: `${storeName} 購物明細`,
             text: `消費日期: ${data.date} - 總金額: NT$${data.totalTwd}`
           });
         } catch (err) {
@@ -100,7 +113,7 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
     } finally {
       setIsSaving(false);
     }
-  }, [data.date, data.totalTwd]);
+  }, [data.date, data.totalTwd, storeName]);
 
   const handleDeleteCurrent = () => {
     if (data.id && onDelete) {
@@ -143,15 +156,18 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
         <div ref={contentRef} className="bg-white relative overflow-hidden text-slate-800 receipt-paper">
           
           {/* Receipt Top Decoration */}
-          <div className="h-1.5 bg-indigo-600 w-full absolute top-0 left-0"></div>
+          <div className="h-2 bg-indigo-600 w-full absolute top-0 left-0"></div>
           
           {/* Header Section */}
           <div className="pt-8 pb-6 px-6 text-center border-b-2 border-dashed border-slate-200">
             <div className="inline-flex items-center justify-center p-3 bg-indigo-50 text-indigo-600 rounded-full mb-4">
                <Receipt className="w-6 h-6" />
             </div>
-            <h2 className="text-xl font-bold tracking-tight text-slate-900 mb-1">JAPAN SHOPPING</h2>
-            <p className="text-xs text-slate-400 tracking-widest uppercase mb-4">Expense Report</p>
+            {/* Dynamic Store Name */}
+            <h2 className="text-xl font-bold tracking-tight text-slate-900 mb-1 line-clamp-2 uppercase">
+                {storeName}
+            </h2>
+            <p className="text-xs text-slate-400 tracking-widest uppercase mb-4">Shopping List</p>
             
             <div className="flex justify-center gap-4 text-xs text-slate-500 font-mono">
                 <span className="flex items-center gap-1">
@@ -203,9 +219,11 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
                                         {item.originalName}
                                     </div>
                                     <div className="flex flex-wrap gap-2 mt-1">
-                                        <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                                            {item.store}
-                                        </span>
+                                        {item.store !== storeName && (
+                                             <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                {item.store}
+                                             </span>
+                                        )}
                                         {item.note && (
                                             <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
                                                 {item.note}
