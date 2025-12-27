@@ -1,16 +1,24 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { CameraCapture } from './components/CameraCapture';
 import { ResultView } from './components/ResultView';
 import { LoadingScreen } from './components/LoadingScreen';
+import { HistoryList } from './components/HistoryList';
 import { translateReceipt } from './services/geminiService';
+import { saveReceiptToHistory, getHistory, deleteFromHistory } from './services/historyService';
 import { AppState, ReceiptAnalysis } from './types';
-import { ScrollText, Sparkles, Plane } from 'lucide-react';
+import { ScrollText, Sparkles, Plane, History } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [historyList, setHistoryList] = useState<ReceiptAnalysis[]>([]);
+
+  // Load history initially for count or future use
+  useEffect(() => {
+    setHistoryList(getHistory());
+  }, []);
 
   const handleCapture = useCallback(async (imageData: string) => {
     setCapturedImage(imageData);
@@ -26,7 +34,12 @@ const App: React.FC = () => {
         throw new Error("無法辨識任何商品，請靠近一點拍攝。");
       }
 
-      setReceiptData(result);
+      // Automatically save successful result
+      const savedRecord = saveReceiptToHistory(result);
+      // Update local history state
+      setHistoryList(prev => [savedRecord, ...prev]);
+
+      setReceiptData(savedRecord);
       setAppState(AppState.RESULT);
     } catch (err) {
       console.error(err);
@@ -40,7 +53,33 @@ const App: React.FC = () => {
     setCapturedImage(null);
     setReceiptData(null);
     setErrorMsg(null);
-    setAppState(AppState.IDLE);
+    // If we were viewing history, go back to history list, else go to idle
+    if (appState === AppState.RESULT && !capturedImage) { 
+        // Logic check: if capturedImage is null, it implies we are viewing a history item (no image stored)
+        // OR we need a separate flag. Simpler: If we have an ID and no image, it's history.
+        setAppState(AppState.HISTORY);
+    } else {
+        setAppState(AppState.IDLE);
+    }
+  };
+
+  const openHistory = () => {
+    setHistoryList(getHistory()); // Refresh list
+    setAppState(AppState.HISTORY);
+  };
+
+  const selectHistoryItem = (item: ReceiptAnalysis) => {
+    setReceiptData(item);
+    setCapturedImage(null); // History items don't have the image stored
+    setAppState(AppState.RESULT);
+  };
+
+  const deleteHistoryItem = (id: string) => {
+    const updated = deleteFromHistory(id);
+    setHistoryList(updated);
+    if (receiptData && receiptData.id === id) {
+        setAppState(AppState.HISTORY); // Go back to list if current item deleted
+    }
   };
 
   return (
@@ -48,7 +87,10 @@ const App: React.FC = () => {
       {/* Sticky Header */}
       <header className="sticky top-0 z-40 w-full backdrop-blur-lg bg-white/80 border-b border-slate-200 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div 
+            className="flex items-center gap-2 cursor-pointer" 
+            onClick={() => setAppState(AppState.IDLE)}
+          >
             <div className="bg-indigo-600 p-2 rounded-lg text-white">
               <ScrollText className="w-5 h-5" />
             </div>
@@ -59,9 +101,19 @@ const App: React.FC = () => {
               <span className="text-[10px] text-slate-500 font-medium">Japan Receipt Organizer</span>
             </div>
           </div>
-          <div className="hidden sm:flex text-xs text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full items-center gap-1 font-medium">
-            <Sparkles className="w-3 h-3" />
-            <span>Gemini AI 匯率換算</span>
+          
+          <div className="flex items-center gap-2">
+            <button 
+                onClick={openHistory}
+                className="flex items-center gap-1.5 px-3 py-2 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition"
+            >
+                <History className="w-5 h-5" />
+                <span className="text-sm font-medium hidden sm:inline">歷史紀錄</span>
+            </button>
+            <div className="hidden sm:flex text-xs text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full items-center gap-1 font-medium">
+                <Sparkles className="w-3 h-3" />
+                <span>AI 匯率換算</span>
+            </div>
           </div>
         </div>
       </header>
@@ -107,11 +159,21 @@ const App: React.FC = () => {
                  <p className="text-xs text-slate-500">自動歸類藥品、美妝、零食等不同類別</p>
                </div>
                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center text-center gap-2">
-                 <h3 className="font-semibold text-slate-700">折扣與均價</h3>
-                 <p className="text-xs text-slate-500">自動計算免稅價、折扣後金額與多入組單價</p>
+                 <h3 className="font-semibold text-slate-700">自動存檔</h3>
+                 <p className="text-xs text-slate-500">分析成功的明細將自動儲存至歷史紀錄中</p>
                </div>
             </div>
           </div>
+        )}
+
+        {/* State: HISTORY */}
+        {appState === AppState.HISTORY && (
+            <HistoryList 
+                history={historyList}
+                onSelect={selectHistoryItem}
+                onUpdateHistory={setHistoryList}
+                onBack={() => setAppState(AppState.IDLE)}
+            />
         )}
 
         {/* State: ANALYZING */}
@@ -120,11 +182,25 @@ const App: React.FC = () => {
         )}
 
         {/* State: RESULT */}
-        {appState === AppState.RESULT && capturedImage && receiptData && (
+        {appState === AppState.RESULT && receiptData && (
           <ResultView 
-            originalImage={capturedImage} 
+            originalImage={capturedImage} // This will be null if coming from History
             data={receiptData} 
-            onRetake={handleRetake} 
+            onRetake={() => {
+                // Determine where to go back to
+                if (capturedImage) {
+                    // It was a new capture, confirm before losing state or just go home
+                    if(confirm("返回後將清除本次掃描畫面（資料已自動儲存）。確定返回嗎？")) {
+                        setAppState(AppState.IDLE);
+                        setCapturedImage(null);
+                        setReceiptData(null);
+                    }
+                } else {
+                    // It was from history, go back to list
+                    setAppState(AppState.HISTORY);
+                }
+            }}
+            onDelete={deleteHistoryItem}
           />
         )}
       </main>

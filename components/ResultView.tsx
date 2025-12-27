@@ -1,15 +1,17 @@
 import React, { useMemo, useRef, useCallback } from 'react';
-import { ArrowLeft, Receipt, Calculator, Calendar, TrendingUp, Download, Loader2, Share2 } from 'lucide-react';
+import { ArrowLeft, Receipt, Calculator, Calendar, TrendingUp, Download, Loader2, Share2, Trash2, Clock } from 'lucide-react';
 import { ReceiptAnalysis, ReceiptItem } from '../types';
 import { toBlob } from 'html-to-image';
+import { deleteFromHistory } from '../services/historyService';
 
 interface ResultViewProps {
-  originalImage: string;
+  originalImage?: string | null; // Made optional
   data: ReceiptAnalysis;
-  onRetake: () => void;
+  onRetake: () => void; // Acts as "Back"
+  onDelete?: (id: string) => void; // Optional delete handler
 }
 
-export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onRetake }) => {
+export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onRetake, onDelete }) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const [isSaving, setIsSaving] = React.useState(false);
   
@@ -45,7 +47,7 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
       // Create a small delay to ensure UI updates are processed
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Cast options to any to avoid TypeScript error with onClone which is supported but sometimes missing in types
+      // Cast options to any to avoid TypeScript error
       const options: any = {
         cacheBust: true,
         backgroundColor: '#f8fafc', // slate-50
@@ -83,15 +85,12 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
             text: `消費日期: ${data.date} - 總金額: NT$${data.totalTwd}`
           });
         } catch (err) {
-          // If user cancels share (AbortError), do nothing. 
-          // If other error, fallback to download.
           if ((err as Error).name !== 'AbortError') {
              console.error('Share failed', err);
              downloadBlob(blob, fileName);
           }
         }
       } else {
-        // Fallback for desktop
         downloadBlob(blob, fileName);
       }
     } catch (err) {
@@ -101,6 +100,18 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
       setIsSaving(false);
     }
   }, [data.date, data.totalTwd]);
+
+  const handleDeleteCurrent = () => {
+    if (data.id && onDelete) {
+      if(confirm("確定要刪除此筆紀錄嗎？")) {
+        onDelete(data.id);
+      }
+    }
+  };
+
+  const formattedTimestamp = data.timestamp 
+    ? new Date(data.timestamp).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+    : null;
 
   return (
     <div ref={contentRef} className="w-full max-w-4xl mx-auto p-4 animate-fade-in pb-20 bg-slate-50 relative">
@@ -121,17 +132,28 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
           <span>消費明細表</span>
         </div>
 
-        {/* Save Button */}
-        <button
-          onClick={handleSaveImage}
-          disabled={isSaving}
-          data-hide-on-save="true"
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-full hover:bg-indigo-700 transition font-medium disabled:opacity-70 shadow-sm shadow-indigo-200"
-        >
-          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-          <span className="hidden sm:inline">儲存圖片</span>
-          <span className="sm:hidden">儲存</span>
-        </button>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2" data-hide-on-save="true">
+          {data.id && onDelete && (
+             <button
+              onClick={handleDeleteCurrent}
+              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition"
+              title="刪除紀錄"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          )}
+          
+          <button
+            onClick={handleSaveImage}
+            disabled={isSaving}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-full hover:bg-indigo-700 transition font-medium disabled:opacity-70 shadow-sm shadow-indigo-200"
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            <span className="hidden sm:inline">儲存圖片</span>
+            <span className="sm:hidden">儲存</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary Card */}
@@ -142,9 +164,12 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
         </div>
         <div className="flex flex-col gap-1">
            <span className="text-xs text-slate-500 uppercase font-bold tracking-wider flex items-center gap-1">
-             <Calendar className="w-3 h-3" /> 消費日期
+             <Calendar className="w-3 h-3" /> 消費時間
            </span>
-           <span className="text-lg font-medium text-slate-700">{data.date}</span>
+           <div className="flex flex-col">
+              <span className="text-lg font-medium text-slate-700 leading-none">{data.date}</span>
+              {data.time && <span className="text-sm text-slate-400 font-medium mt-1">{data.time}</span>}
+           </div>
         </div>
         <div className="flex flex-col gap-1">
            <span className="text-xs text-slate-500 uppercase font-bold tracking-wider flex items-center gap-1">
@@ -175,7 +200,7 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
               </span>
             </div>
             
-            {/* Desktop Table View (Hidden on Mobile) */}
+            {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
@@ -204,7 +229,7 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
               </table>
             </div>
 
-            {/* Mobile Card View (Hidden on Desktop) */}
+            {/* Mobile Card View */}
             <div className="md:hidden flex flex-col divide-y divide-slate-100">
               {groupedItems[category].map((item, idx) => (
                 <div key={idx} className="p-4 bg-white flex flex-col gap-2">
@@ -243,34 +268,55 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
         ))}
       </div>
 
-      {/* Original Image Toggle - For UI viewing only (Hidden in saved image) */}
-      <div className="mt-8 flex justify-center" data-hide-on-save="true">
-        <details className="group w-full max-w-sm">
-          <summary className="list-none cursor-pointer flex items-center justify-center gap-2 text-slate-400 hover:text-slate-600 transition text-sm py-2">
-             <span>查看原始收據</span>
-             <div className="w-12 h-px bg-slate-200"></div>
-          </summary>
-          <div className="mt-2 p-2 bg-slate-100 rounded-lg border border-slate-200">
-             <img src={originalImage} alt="Original Receipt" className="w-full h-auto opacity-90 rounded" />
-          </div>
-        </details>
-      </div>
-
-      {/* Footer Image - Hidden in UI, Visible ONLY in Saved Image (Bottom Right) */}
-      <div 
-        id="receipt-footer-image" 
-        className="hidden mt-8 border-t border-slate-200 pt-6 flex-col items-end gap-2"
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-sm text-slate-500 font-medium">原始收據備份</span>
+      {/* Creation Time Footer - Shows when this record was scanned/created */}
+      {formattedTimestamp && (
+        <div className="mt-8 text-center" data-hide-on-save="true">
+            <span className="inline-flex items-center gap-1 text-[10px] text-slate-300 bg-slate-100 px-3 py-1 rounded-full">
+                <Clock className="w-3 h-3" />
+                建立時間：{formattedTimestamp}
+            </span>
         </div>
-        <img 
-          src={originalImage} 
-          alt="Original Receipt" 
-          className="w-48 max-w-[40%] h-auto rounded-lg border border-slate-200 shadow-sm opacity-95" 
-        />
-        <p className="text-[10px] text-slate-300 mt-2">Generated by Japan Receipt Organizer</p>
-      </div>
+      )}
+
+      {/* Original Image Toggle - Only show if originalImage exists */}
+      {originalImage && (
+        <div className="mt-4 flex justify-center" data-hide-on-save="true">
+          <details className="group w-full max-w-sm">
+            <summary className="list-none cursor-pointer flex items-center justify-center gap-2 text-slate-400 hover:text-slate-600 transition text-sm py-2">
+              <span>查看原始收據</span>
+              <div className="w-12 h-px bg-slate-200"></div>
+            </summary>
+            <div className="mt-2 p-2 bg-slate-100 rounded-lg border border-slate-200">
+              <img src={originalImage} alt="Original Receipt" className="w-full h-auto opacity-90 rounded" />
+            </div>
+          </details>
+        </div>
+      )}
+
+      {/* Footer Image - Hidden in UI, Visible ONLY in Saved Image */}
+      {/* Changes: Made centered, larger (max-w-[80%]), and white background wrapper */}
+      {originalImage ? (
+        <div 
+          id="receipt-footer-image" 
+          className="hidden mt-8 border-t border-slate-200 pt-6 flex-col items-center gap-2"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm text-slate-500 font-medium tracking-widest uppercase">原始收據</span>
+          </div>
+          <div className="bg-white p-2 border border-slate-200 rounded-xl shadow-sm">
+            <img 
+              src={originalImage} 
+              alt="Original Receipt" 
+              className="w-auto max-w-[80%] max-h-[600px] h-auto rounded-lg mx-auto" 
+            />
+          </div>
+          <p className="text-[10px] text-slate-300 mt-2">Generated by Japan Receipt Organizer</p>
+        </div>
+      ) : (
+        <div id="receipt-footer-image" className="hidden mt-8 border-t border-slate-200 pt-6 flex-col items-center">
+             <p className="text-[10px] text-slate-300 mt-2">Generated by Japan Receipt Organizer</p>
+        </div>
+      )}
     </div>
   );
 };

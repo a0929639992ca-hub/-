@@ -9,8 +9,11 @@ export interface ReceiptItem {
 }
 
 export interface ReceiptAnalysis {
+  id?: string;           // 唯一識別碼 (儲存用)
+  timestamp?: number;    // 建立時間 (儲存用)
   exchangeRate: number;  // 匯率
   date: string;          // 日期
+  time?: string;         // 購物時間 (e.g. 14:30) - Added
   items: ReceiptItem[];  // 商品列表
   totalTwd: number;      // 總台幣
 }
@@ -20,5 +23,6 @@ export enum AppState {
   CAPTURING = 'CAPTURING',
   ANALYZING = 'ANALYZING',
   RESULT = 'RESULT',
+  HISTORY = 'HISTORY',
   ERROR = 'ERROR'
 }

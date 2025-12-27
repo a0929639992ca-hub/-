@@ -37,7 +37,10 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
       Task: Analyze this Japanese receipt image and create a structured "Categorized Expense Report".
       
       Rules for Extraction & Calculation:
-      1. **Date & Rate**: Identify the transaction date. Estimate the JPY to TWD exchange rate for that date (e.g., approx 0.21~0.23). If unsure, use 0.22.
+      1. **Date & Time**: 
+         - Identify the transaction date (YYYY-MM-DD).
+         - Identify the transaction time (HH:MM) if visible on the receipt.
+         - Estimate the JPY to TWD exchange rate for that date (e.g., approx 0.21~0.23). If unsure, use 0.22.
       2. **Categories**: Sort items into categories: [精品香氛, 伴手禮, 美妝保養, 藥品保健, 食品調味, 零食雜貨, 服飾配件, 3C家電, 其他].
       3. **Price Logic**:
          - Extract the *actual paid amount* per item.
@@ -56,6 +59,7 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
       Return a JSON object with:
       - exchangeRate: number (the rate used)
       - date: string (YYYY-MM-DD)
+      - time: string (HH:MM, or empty string if not found)
       - totalTwd: number (sum of all items in TWD)
       - items: Array of objects:
         - category: string
@@ -90,6 +94,7 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
           properties: {
             exchangeRate: { type: Type.NUMBER },
             date: { type: Type.STRING },
+            time: { type: Type.STRING },
             totalTwd: { type: Type.NUMBER },
             items: {
               type: Type.ARRAY,
