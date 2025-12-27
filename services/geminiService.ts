@@ -1,8 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { ReceiptAnalysis } from "../types";
 
-// Switch to 'gemini-3-flash-preview' which is generally more stable for free tier quotas
-// and supports Google Search.
+// Using 'gemini-3-flash-preview' without tools is very fast and efficient.
 const MODEL_NAME = 'gemini-3-flash-preview';
 
 /**
@@ -28,7 +27,7 @@ const cleanJsonString = (text: string): string => {
 async function retryWithBackoff<T>(
   operation: () => Promise<T>,
   retries: number = 3, 
-  delay: number = 3500 // Increased initial delay to 3.5s to better handle 429s
+  delay: number = 2000 
 ): Promise<T> {
   try {
     return await operation();
@@ -53,9 +52,14 @@ async function retryWithBackoff<T>(
  * Analyzes a Japanese receipt to generate a categorized expense report in TWD.
  * @param base64Image The base64 encoded string of the image (without prefix).
  * @param mimeType The mime type of the image (e.g., 'image/jpeg').
+ * @param manualRate Optional manual exchange rate. Defaults to 0.25 if not provided.
  * @returns A structured ReceiptAnalysis object.
  */
-export const translateReceipt = async (base64Image: string, mimeType: string = 'image/jpeg'): Promise<ReceiptAnalysis> => {
+export const translateReceipt = async (
+    base64Image: string, 
+    mimeType: string = 'image/jpeg',
+    manualRate?: number
+): Promise<ReceiptAnalysis> => {
   try {
     // API key must be obtained exclusively from process.env.API_KEY
     const apiKey = process.env.API_KEY;
@@ -66,6 +70,9 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
     }
 
     const ai = new GoogleGenAI({ apiKey: apiKey });
+    
+    // Use provided rate or default to 0.25
+    const targetRate = manualRate || 0.25;
 
     const prompt = `
       You are an expert accountant and Japan travel shopping assistant specifically for Taiwanese travelers.
@@ -77,16 +84,15 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
          - Identify the transaction date (YYYY-MM-DD).
          - **EXTREMELY IMPORTANT**: You MUST identify the transaction time (HH:MM). 
            - Look for "14:30", "19:00", "09:45", "PM 02:30".
-      2. **Exchange Rate (SEARCH)**:
-         - **STEP 1**: Identify the transaction date.
-         - **STEP 2**: Use the **Google Search tool** to find the specific "Bank of Taiwan JPY to TWD Cash Selling Rate" (台灣銀行 日幣 現金賣出 匯率) for that date.
-           - Search query example: "2024-10-25 台灣銀行 日幣 匯率 現金賣出"
-         - **STEP 3**: Use the found rate. If not found, fallback to 0.215.
+      2. **Exchange Rate (FIXED)**:
+         - **DO NOT SEARCH THE WEB.**
+         - Use the fixed exchange rate of: **${targetRate}**
+         - Formula: JPY Price * ${targetRate} = TWD Price.
       3. **Categories**: Sort items into categories: [精品香氛, 伴手禮, 美妝保養, 藥品保健, 食品調味, 零食雜貨, 服飾配件, 3C家電, 其他].
       4. **Price Logic**:
          - Extract the **Total Payment Amount** in JPY.
          - Extract the *actual paid amount* per item.
-         - Convert the final JPY amounts to TWD using the searched exchange rate (round to nearest integer).
+         - Convert ALL JPY amounts to TWD using the rate ${targetRate} (round to nearest integer).
       5. **Translation (CRITICAL)**: 
          - **field: name**: Translate product name to **Natural Taiwanese Mandarin (道地台灣繁體中文)**.
          - **field: originalName**: Keep the EXACT Japanese product name.
@@ -96,7 +102,7 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
       
       JSON Schema:
       {
-        "exchangeRate": number,
+        "exchangeRate": number, // This should be ${targetRate}
         "date": "YYYY-MM-DD",
         "time": "HH:MM",
         "totalJpy": number,
@@ -132,9 +138,7 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
                 },
                 ],
             },
-            config: {
-                tools: [{ googleSearch: {} }], // Re-enable Google Search
-            }
+            // REMOVED googleSearch tool to save quota and force manual rate usage
         });
     });
 
@@ -150,13 +154,6 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
     } catch (parseError) {
       console.error("JSON Parse Error:", parseError, "Text received:", text);
       throw new Error("無法解析收據資料，請確保照片清晰並重試。");
-    }
-
-    // Extract grounding URL if available
-    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const webChunk = chunks.find(c => c.web?.uri);
-    if (webChunk && webChunk.web?.uri) {
-        result.sourceUrl = webChunk.web.uri;
     }
 
     return result;

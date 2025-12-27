@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useCallback } from 'react';
-import { ArrowLeft, Receipt, Calendar, Download, Loader2, Trash2, Clock, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Receipt, Calendar, Download, Loader2, Trash2, Clock } from 'lucide-react';
 import { ReceiptAnalysis, ReceiptItem } from '../types';
 import { toBlob } from 'html-to-image';
 
@@ -198,19 +198,6 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
                             <span>Rate: {data.exchangeRate}</span>
                         </p>
                     </div>
-                 )}
-                 {/* Source Link - Restored */}
-                 {data.sourceUrl && (
-                    <a 
-                        href={data.sourceUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-600 transition-colors mt-1"
-                        data-hide-on-save="true"
-                    >
-                        <ExternalLink className="w-3 h-3" />
-                        <span>匯率來源: 台灣銀行 (Search)</span>
-                    </a>
                  )}
              </div>
           </div>

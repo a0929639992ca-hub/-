@@ -6,7 +6,7 @@ import { HistoryList } from './components/HistoryList';
 import { translateReceipt } from './services/geminiService';
 import { saveReceiptToHistory, getHistory, deleteFromHistory } from './services/historyService';
 import { AppState, ReceiptAnalysis } from './types';
-import { ScrollText, Sparkles, History, Receipt, MapPin } from 'lucide-react';
+import { ScrollText, Sparkles, History, Receipt, Calculator } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
@@ -14,6 +14,9 @@ const App: React.FC = () => {
   const [receiptData, setReceiptData] = useState<ReceiptAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [historyList, setHistoryList] = useState<ReceiptAnalysis[]>([]);
+  
+  // Manual Exchange Rate State (Default empty, logic will default to 0.25)
+  const [customRate, setCustomRate] = useState<string>('');
 
   useEffect(() => {
     setHistoryList(getHistory());
@@ -26,7 +29,15 @@ const App: React.FC = () => {
 
     try {
       const base64Data = imageData.split(',')[1];
-      const result = await translateReceipt(base64Data);
+      
+      // Parse custom rate, default to undefined (service will handle 0.25 default)
+      let rateToSend: number | undefined = undefined;
+      const parsedRate = parseFloat(customRate);
+      if (!isNaN(parsedRate) && parsedRate > 0) {
+        rateToSend = parsedRate;
+      }
+
+      const result = await translateReceipt(base64Data, 'image/jpeg', rateToSend);
       
       if (!result || result.items.length === 0) {
         throw new Error("無法辨識任何商品，請靠近一點拍攝。");
@@ -42,7 +53,7 @@ const App: React.FC = () => {
       setErrorMsg(err instanceof Error ? err.message : "發生未知錯誤，請重試");
       setAppState(AppState.ERROR);
     }
-  }, []);
+  }, [customRate]);
 
   const openHistory = () => {
     setHistoryList(getHistory());
@@ -108,7 +119,7 @@ const App: React.FC = () => {
         
         {/* State: IDLE or ERROR (Show Camera) */}
         {(appState === AppState.IDLE || appState === AppState.ERROR) && (
-          <div className="flex flex-col gap-6 animate-in fade-in duration-500">
+          <div className="flex flex-col gap-5 animate-in fade-in duration-500">
             
             {/* Summary Mini Card */}
             {historyList.length > 0 && (
@@ -123,13 +134,22 @@ const App: React.FC = () => {
                 </div>
             )}
 
-            <div className="text-center space-y-1 py-2">
-              <h2 className="text-2xl font-bold text-slate-900">
-                掃描收據
-              </h2>
-              <p className="text-slate-500 text-sm">
-                自動辨識商品、計算匯率並分類
-              </p>
+            {/* Exchange Rate Setting */}
+            <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 shadow-sm">
+                <div className="p-2 bg-slate-100 rounded-lg text-slate-500">
+                    <Calculator className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                    <label className="text-xs font-bold text-slate-500 block mb-0.5">匯率設定 (Leave empty for 0.25)</label>
+                    <input 
+                        type="number" 
+                        step="0.001" 
+                        placeholder="預設 0.25"
+                        value={customRate}
+                        onChange={(e) => setCustomRate(e.target.value)}
+                        className="w-full text-lg font-mono font-bold text-slate-800 bg-transparent placeholder-slate-300 focus:outline-none"
+                    />
+                </div>
             </div>
 
             <div className="relative shadow-2xl rounded-3xl overflow-hidden ring-4 ring-white">
@@ -148,11 +168,11 @@ const App: React.FC = () => {
               </div>
             )}
             
-            <div className="grid grid-cols-2 gap-3 mt-2">
+            <div className="grid grid-cols-2 gap-3 mt-1">
                <FeatureCard 
                  icon={<ScrollText className="w-4 h-4 text-indigo-500" />}
-                 title="即時匯率"
-                 desc="依收據日期自動換算"
+                 title="指定匯率"
+                 desc="手動輸入或預設0.25"
                />
                <FeatureCard 
                  icon={<Sparkles className="w-4 h-4 text-pink-500" />}
