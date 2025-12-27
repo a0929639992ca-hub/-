@@ -21,9 +21,12 @@ const cleanJsonString = (text: string): string => {
  */
 export const translateReceipt = async (base64Image: string, mimeType: string = 'image/jpeg'): Promise<ReceiptAnalysis> => {
   try {
+    // API key must be obtained exclusively from process.env.API_KEY
     const apiKey = process.env.API_KEY;
+
     if (!apiKey) {
-      throw new Error("API Key 未設定。請在 Vercel 環境變數中設定 API_KEY。");
+      console.error("API Key missing.");
+      throw new Error("找不到 API Key。請在 Vercel 設定環境變數 'API_KEY'，並務必「重新部署 (Redeploy)」以生效。");
     }
 
     const ai = new GoogleGenAI({ apiKey: apiKey });
