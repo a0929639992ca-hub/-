@@ -23,14 +23,15 @@ const App: React.FC = () => {
       const result = await translateReceipt(base64Data);
       
       if (!result || result.items.length === 0) {
-        throw new Error("無法辨識任何商品");
+        throw new Error("無法辨識任何商品，請靠近一點拍攝。");
       }
 
       setReceiptData(result);
       setAppState(AppState.RESULT);
     } catch (err) {
       console.error(err);
-      setErrorMsg("分析失敗，請確保照片清晰包含價格與商品名稱。");
+      // Show the actual error message from the service
+      setErrorMsg(err instanceof Error ? err.message : "發生未知錯誤，請重試");
       setAppState(AppState.ERROR);
     }
   }, []);
@@ -85,13 +86,13 @@ const App: React.FC = () => {
             <CameraCapture onCapture={handleCapture} />
 
             {appState === AppState.ERROR && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-center text-sm">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-center text-sm font-medium">
                 {errorMsg}
                 <button 
                   onClick={() => setAppState(AppState.IDLE)}
-                  className="block mx-auto mt-2 text-red-700 underline font-medium hover:text-red-800"
+                  className="block mx-auto mt-2 text-red-700 underline font-bold hover:text-red-800"
                 >
-                  重試
+                  再試一次
                 </button>
               </div>
             )}

@@ -4,6 +4,16 @@ import { ReceiptAnalysis } from "../types";
 const MODEL_NAME = 'gemini-3-flash-preview';
 
 /**
+ * Clean potential markdown code blocks from the response text.
+ * Sometimes Gemini wraps JSON in ```json ... ```
+ */
+const cleanJsonString = (text: string): string => {
+  if (!text) return "";
+  // Remove ```json at start and ``` at end, and trim whitespace
+  return text.replace(/^```(json)?/i, "").replace(/```$/, "").trim();
+};
+
+/**
  * Analyzes a Japanese receipt to generate a categorized expense report in TWD.
  * @param base64Image The base64 encoded string of the image (without prefix).
  * @param mimeType The mime type of the image (e.g., 'image/jpeg').
@@ -11,7 +21,12 @@ const MODEL_NAME = 'gemini-3-flash-preview';
  */
 export const translateReceipt = async (base64Image: string, mimeType: string = 'image/jpeg'): Promise<ReceiptAnalysis> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      throw new Error("API Key 未設定。請在 Vercel 環境變數中設定 API_KEY。");
+    }
+
+    const ai = new GoogleGenAI({ apiKey: apiKey });
 
     const prompt = `
       You are an expert accountant and Japan travel shopping assistant specifically for Taiwanese travelers.
@@ -95,14 +110,22 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
       }
     });
 
-    const text = response.text;
+    const text = cleanJsonString(response.text || "");
+    
     if (!text) {
-      throw new Error("No response from AI");
+      throw new Error("AI 回應為空，請重試");
     }
 
-    return JSON.parse(text) as ReceiptAnalysis;
+    try {
+      return JSON.parse(text) as ReceiptAnalysis;
+    } catch (parseError) {
+      console.error("JSON Parse Error:", parseError, "Text received:", text);
+      throw new Error("無法解析收據資料，請確保照片清晰並重試。");
+    }
+
   } catch (error) {
     console.error("Gemini Service Error:", error);
+    // Re-throw the specific error message so the UI can show it
     throw error;
   }
 };

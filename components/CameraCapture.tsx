@@ -50,7 +50,8 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture }) => {
 
   // Image resizing logic to speed up API processing
   const processAndCaptureImage = (source: HTMLVideoElement | HTMLImageElement) => {
-    const MAX_DIMENSION = 1024; // Limit max dimension to 1024px
+    // Increased from 1024 to 1600 to ensure small Japanese text is legible
+    const MAX_DIMENSION = 1600; 
     let width = source instanceof HTMLVideoElement ? source.videoWidth : source.width;
     let height = source instanceof HTMLVideoElement ? source.videoHeight : source.height;
 
@@ -68,8 +69,8 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture }) => {
     const context = canvas.getContext('2d');
     if (context) {
       context.drawImage(source, 0, 0, width, height);
-      // Reduce quality to 0.7 for faster upload
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      // Increased quality to 0.85 to reduce compression artifacts on text
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
       stopCamera();
       onCapture(dataUrl);
     }
