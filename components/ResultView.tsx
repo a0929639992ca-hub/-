@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useCallback } from 'react';
-import { ArrowLeft, Receipt, Calendar, Download, Loader2, Trash2, Clock } from 'lucide-react';
+import { ArrowLeft, Receipt, Calendar, Download, Loader2, Trash2, Clock, ExternalLink } from 'lucide-react';
 import { ReceiptAnalysis, ReceiptItem } from '../types';
 import { toBlob } from 'html-to-image';
 
@@ -189,15 +189,30 @@ export const ResultView: React.FC<ResultViewProps> = ({ originalImage, data, onR
                 <span className="text-5xl font-bold font-mono tracking-tighter">{data.totalTwd.toLocaleString()}</span>
              </div>
              
-             {data.totalJpy && (
-                <div className="inline-block bg-white border border-slate-200 px-3 py-1 rounded-md">
-                    <p className="text-xs text-slate-500 font-mono flex items-center gap-2">
-                        <span>JPY Total: ¥{data.totalJpy.toLocaleString()}</span>
-                        <span className="text-slate-300">|</span>
-                        <span>Rate: {data.exchangeRate}</span>
-                    </p>
-                </div>
-             )}
+             <div className="flex flex-col items-center gap-1">
+                 {data.totalJpy && (
+                    <div className="inline-block bg-white border border-slate-200 px-3 py-1 rounded-md">
+                        <p className="text-xs text-slate-500 font-mono flex items-center gap-2">
+                            <span>JPY Total: ¥{data.totalJpy.toLocaleString()}</span>
+                            <span className="text-slate-300">|</span>
+                            <span>Rate: {data.exchangeRate}</span>
+                        </p>
+                    </div>
+                 )}
+                 {/* Source Link */}
+                 {data.sourceUrl && (
+                    <a 
+                        href={data.sourceUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-600 transition-colors"
+                        data-hide-on-save="true"
+                    >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>匯率來源: 台灣銀行 (Search)</span>
+                    </a>
+                 )}
+             </div>
           </div>
 
           {/* Items List */}
