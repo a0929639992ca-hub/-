@@ -75,49 +75,46 @@ export const translateReceipt = async (
     const targetRate = manualRate || 0.25;
 
     const prompt = `
-      You are an expert accountant and Japan travel shopping assistant specifically for Taiwanese travelers.
+      You are an expert accountant and Japan travel shopping assistant.
       
       Task: Analyze this Japanese receipt image and create a structured "Categorized Expense Report".
       
-      Rules for Extraction & Calculation:
-      1. **Date (CRITICAL)**: 
-         - **Scan the entire image** (Header, Footer, near logos).
-         - Look for keywords: "日付", "年月日", "Date", "領収日".
-         - **Support Japanese Era**: 
-           - 'R6' or '令和6年' = 2024
-           - 'R7' or '令和7年' = 2025
-           - 'R5' or '令和5年' = 2023
-         - Format output as: "YYYY-MM-DD".
+      **STEP 1: METADATA EXTRACTION (HIGHEST PRIORITY)**
+      Search the ENTIRE receipt (Header, Footer, and body) for Date and Time.
       
-      2. **Time (CRITICAL)**:
-         - **You MUST identify the transaction time.**
-         - Look for patterns like "14:30", "19:00", "09:45", "PM 02:30".
-         - Look near the Date, or at the very bottom of the receipt (footer).
-         - If found, output as "HH:MM".
-         - If absolutely not found, estimate based on lighting or standard business hours (e.g. "12:00"), but try hard to find it.
-
-      3. **Exchange Rate (FIXED)**:
-         - **DO NOT SEARCH THE WEB.**
-         - Use the fixed exchange rate of: **${targetRate}**
-         - Formula: JPY Price * ${targetRate} = TWD Price.
+      **Date Search Rules:**
+      - Look specifically for these keywords: "日付", "年月日", "Date", "領収日", "利用日".
+      - **Era Conversion (CRITICAL)**: 
+        - "R6" or "令和6" or "令和6年" -> **2024**
+        - "R7" or "令和7" or "令和7年" -> **2025**
+        - "R5" or "令和5" -> **2023**
+      - Common Formats to scan: 
+        - "2024/10/25", "24-10-25"
+        - "R6.10.25", "令和6年10月25日"
+        - "Oct 25, 2024"
+      - **Output**: YYYY-MM-DD format (e.g., "2024-10-25").
       
-      4. **Categories**: Sort items into categories: [精品香氛, 伴手禮, 美妝保養, 藥品保健, 食品調味, 零食雜貨, 服飾配件, 3C家電, 其他].
+      **Time Search Rules:**
+      - **You MUST identify the transaction time.**
+      - Look for patterns like: "14:30", "19:00:00", "09:45", "PM 02:30", "18:45".
+      - **Location Hint**: Often located **Right next to the date** OR **At the very bottom** of the receipt (footer).
+      - Look for labels: "時刻", "Time", "領収".
+      - **Output**: HH:MM format (e.g., "14:30"). 
       
-      5. **Price Logic**:
-         - Extract the **Total Payment Amount** in JPY.
-         - Extract the *actual paid amount* per item.
-         - Convert ALL JPY amounts to TWD using the rate ${targetRate} (round to nearest integer).
+      **STEP 2: ITEM EXTRACTION & CALCULATION**
+      - Exchange Rate: FIXED at ${targetRate}.
+      - Identify the STORE NAME (often at the very top, large text).
+      - List all purchased items.
+      - **Translate** item names to Natural Taiwanese Traditional Chinese (道地台灣繁體中文).
+      - **Keep** original Japanese names.
+      - Calculate prices: JPY * ${targetRate} = TWD (round to integer).
       
-      6. **Translation (CRITICAL)**: 
-         - **field: name**: Translate product name to **Natural Taiwanese Mandarin (道地台灣繁體中文)**.
-         - **field: originalName**: Keep the EXACT Japanese product name.
+      **Categories**: [精品香氛, 伴手禮, 美妝保養, 藥品保健, 食品調味, 零食雜貨, 服飾配件, 3C家電, 其他].
       
-      Output Format:
-      - Return **ONLY** a valid JSON object inside a \`\`\`json block.
-      
-      JSON Schema:
+      **Output JSON Only**:
+      \`\`\`json
       {
-        "exchangeRate": number, // This should be ${targetRate}
+        "exchangeRate": ${targetRate},
         "date": "YYYY-MM-DD",
         "time": "HH:MM",
         "totalJpy": number,
@@ -134,6 +131,7 @@ export const translateReceipt = async (
           }
         ]
       }
+      \`\`\`
     `;
 
     // Wrap the API call in the retry helper
