@@ -1,8 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
 import { ReceiptAnalysis } from "../types";
 
-// User requested "Gemini Nano Banana", which maps to 'gemini-2.5-flash-image'
-const MODEL_NAME = 'gemini-2.5-flash-image';
+// Switched to 'gemini-3-flash-preview' to avoid 429 quotas on the previous model
+// and to enable Google Search capabilities.
+const MODEL_NAME = 'gemini-3-flash-preview';
 
 /**
  * Robustly extracts JSON from the model response.
@@ -20,6 +21,33 @@ const cleanJsonString = (text: string): string => {
   // Fallback: Remove markdown code block syntax if present without "json" tag
   return text.replace(/^```/g, "").replace(/```$/g, "").trim();
 };
+
+/**
+ * Helper function to retry an async operation with exponential backoff.
+ */
+async function retryWithBackoff<T>(
+  operation: () => Promise<T>,
+  retries: number = 3,
+  delay: number = 2000
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error: any) {
+    // Check for 429 (Resource Exhausted) or 503 (Service Unavailable)
+    const isRetryable = 
+      error?.status === 429 || 
+      error?.code === 429 || 
+      (error?.message && error.message.includes('429')) ||
+      error?.status === 503;
+
+    if (retries > 0 && isRetryable) {
+      console.warn(`API Limit hit. Retrying in ${delay}ms... (${retries} retries left)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return retryWithBackoff(operation, retries - 1, delay * 2);
+    }
+    throw error;
+  }
+}
 
 /**
  * Analyzes a Japanese receipt to generate a categorized expense report in TWD.
@@ -49,15 +77,16 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
          - Identify the transaction date (YYYY-MM-DD).
          - **EXTREMELY IMPORTANT**: You MUST identify the transaction time (HH:MM). 
            - Scan the entire receipt (top, bottom, near date) for patterns like "14:30", "19:00", "09:45", "PM 02:30".
-           - It is rarely missing. Look closely.
-      2. **Exchange Rate**:
-         - Estimate the JPY to TWD exchange rate based on the date.
-         - Use **0.215** as a generic baseline if unknown, or adjust slightly based on historical trends for that date if you know them.
+      2. **Exchange Rate (SEARCH)**:
+         - **STEP 1**: Identify the transaction date from the receipt.
+         - **STEP 2**: Use the **Google Search tool** to find the specific "Bank of Taiwan JPY to TWD Cash Selling Rate" (台灣銀行 日幣 現金賣出 匯率) for that date.
+         - **STEP 3**: Use the found rate for the 'exchangeRate' field. 
+         - If specific data isn't available, find the most recent rate.
       3. **Categories**: Sort items into categories: [精品香氛, 伴手禮, 美妝保養, 藥品保健, 食品調味, 零食雜貨, 服飾配件, 3C家電, 其他].
       4. **Price Logic**:
          - Extract the **Total Payment Amount** in JPY (Sum of all items including tax/discounts).
          - Extract the *actual paid amount* per item.
-         - Convert the final JPY amounts to TWD using your estimated exchange rate (round to nearest integer).
+         - Convert the final JPY amounts to TWD using the searched exchange rate (round to nearest integer).
       5. **Translation (CRITICAL)**: 
          - **field: name**: Translate the product name into **Natural Taiwanese Mandarin (道地台灣繁體中文)**.
            - Examples: '洗面乳', '優格', '洋芋片', '行動電源'.
@@ -88,23 +117,27 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
       }
     `;
 
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: base64Image,
+    // Wrap the API call in the retry helper
+    const response = await retryWithBackoff(async () => {
+        return await ai.models.generateContent({
+            model: MODEL_NAME,
+            contents: {
+                parts: [
+                {
+                    inlineData: {
+                    mimeType: mimeType,
+                    data: base64Image,
+                    },
+                },
+                {
+                    text: prompt,
+                },
+                ],
             },
-          },
-          {
-            text: prompt,
-          },
-        ],
-      },
-      // Note: 'gemini-2.5-flash-image' does not support responseSchema, responseMimeType, or tools (Google Search).
-      // We rely on prompt engineering for JSON output.
+            config: {
+                tools: [{ googleSearch: {} }], // Enable Google Search for exchange rates
+            }
+        });
     });
 
     const text = cleanJsonString(response.text || "");
@@ -121,10 +154,23 @@ export const translateReceipt = async (base64Image: string, mimeType: string = '
       throw new Error("無法解析收據資料，請確保照片清晰並重試。");
     }
 
+    // Extract grounding URL if available (to attribute the exchange rate source)
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const webChunk = chunks.find(c => c.web?.uri);
+    if (webChunk && webChunk.web?.uri) {
+        result.sourceUrl = webChunk.web.uri;
+    }
+
     return result;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Service Error:", error);
+    
+    // Provide a more user-friendly error message for quotas
+    if (error?.status === 429 || error?.message?.includes('429')) {
+        throw new Error("目前使用人數過多 (429)，請稍後再試，或檢查您的 API Key 配額。");
+    }
+    
     throw error;
   }
 };
