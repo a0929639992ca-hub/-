@@ -146,7 +146,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture }) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center w-full min-h-[500px] bg-slate-900 rounded-3xl overflow-hidden relative shadow-2xl ring-1 ring-slate-900/5">
+    <div className="flex flex-col items-center justify-center w-full aspect-[3/4] max-h-[500px] bg-slate-900 rounded-3xl overflow-hidden relative shadow-2xl ring-1 ring-slate-900/5">
       {/* Video Preview */}
       <video
         ref={videoRef}

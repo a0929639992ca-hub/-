@@ -1,6 +1,6 @@
 import React from 'react';
 import { ReceiptAnalysis } from '../types';
-import { Calendar, Trash2, ChevronRight, Store, Clock } from 'lucide-react';
+import { Trash2, ShoppingBag, Clock } from 'lucide-react';
 import { deleteFromHistory } from '../services/historyService';
 
 interface HistoryListProps {
@@ -39,7 +39,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
       {history.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
-            <Store className="w-8 h-8 text-slate-300" />
+            <ShoppingBag className="w-8 h-8 text-slate-300" />
           </div>
           <h3 className="text-base font-bold text-slate-700 mb-1">目前沒有歷史紀錄</h3>
           <p className="text-xs text-slate-400 mb-6">開始掃描您的第一張日本收據吧</p>
@@ -59,17 +59,23 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
               className="group bg-white rounded-xl p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100 hover:border-indigo-300 transition-all cursor-pointer relative overflow-hidden"
             >
               <div className="flex justify-between items-start">
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-white bg-indigo-500 px-1.5 py-0.5 rounded-md">
-                              {record.date.slice(5)} {/* Show MM-DD */}
+                          <span className="text-xs font-bold text-white bg-indigo-500 px-1.5 py-0.5 rounded-md font-mono">
+                              {record.date.slice(5)}
                           </span>
-                          <span className="text-sm font-bold text-slate-700 truncate max-w-[120px]">
+                           {record.time && (
+                            <span className="text-xs font-medium text-slate-400 font-mono flex items-center gap-0.5">
+                                <Clock className="w-3 h-3" />
+                                {record.time}
+                            </span>
+                          )}
+                      </div>
+                      <div className="text-sm font-bold text-slate-700 truncate max-w-[140px]">
                               {getStoreName(record)}
-                          </span>
                       </div>
                       <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> 
+                          <ShoppingBag className="w-3 h-3" /> 
                           {record.items.length} 筆商品
                       </span>
                   </div>
