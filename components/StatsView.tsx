@@ -1,18 +1,83 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { ReceiptAnalysis } from '../types';
-import { PieChart, ShoppingBag, Gift, Shirt, Pill, Smartphone, Utensils, Sparkles, Package, Calendar as CalendarIcon, Filter } from 'lucide-react';
+import { PieChart, ShoppingBag, Gift, Shirt, Pill, Smartphone, Utensils, Sparkles, Package, Calendar as CalendarIcon, Filter, Database, ShieldCheck, AlertCircle, Download, Upload, FileJson } from 'lucide-react';
+import { getStorageStats, exportHistoryData, importHistoryData } from '../services/historyService';
 
 interface StatsViewProps {
   history: ReceiptAnalysis[];
+  userId?: string;
+  onDataRefresh?: (newHistory: ReceiptAnalysis[]) => void;
 }
 
-export const StatsView: React.FC<StatsViewProps> = ({ history }) => {
+export const StatsView: React.FC<StatsViewProps> = ({ history, userId, onDataRefresh }) => {
   // Date Range State
   const today = new Date().toISOString().split('T')[0];
   const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
   
   const [startDate, setStartDate] = useState(firstDayOfMonth);
   const [endDate, setEndDate] = useState(today);
+  const [storageDiagnostic, setStorageDiagnostic] = useState<any>(null);
+
+  useEffect(() => {
+    setStorageDiagnostic(getStorageStats(userId));
+  }, [history, userId]);
+
+  // Handle Export to iCloud
+  const handleExport = async () => {
+    try {
+      const jsonData = exportHistoryData(userId);
+      const blob = new Blob([jsonData], { type: 'application/json' });
+      const fileName = `JapanReceiptBackup_${new Date().toISOString().split('T')[0]}.json`;
+      const file = new File([blob], fileName, { type: 'application/json' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: '日本購物明細備份',
+          text: '這是您的日本購物記帳資料備份檔，請儲存至 iCloud 雲端硬碟。'
+        });
+      } else {
+        // Fallback for desktop: Direct download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        alert('導出失敗：' + (err as Error).message);
+      }
+    }
+  };
+
+  // Handle Import from iCloud
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!confirm('匯入資料將會與目前紀錄合併（不會刪除現有資料），是否繼續？')) {
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const newList = importHistoryData(content, userId);
+        if (onDataRefresh) {
+          onDataRefresh(newList);
+          alert('資料還原成功！已合併所有紀錄。');
+        }
+      } catch (err) {
+        alert('匯入失敗：' + (err as Error).message);
+      }
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  };
 
   // Helper to map category names to Icons and Colors
   const getCategoryStyle = (category: string) => {
@@ -69,6 +134,21 @@ export const StatsView: React.FC<StatsViewProps> = ({ history }) => {
         </div>
       </div>
 
+      {/* Grand Total Card */}
+      <div className="bg-gradient-to-br from-indigo-600 to-violet-600 rounded-2xl p-6 text-white shadow-xl shadow-indigo-200 mb-8 relative overflow-hidden">
+        <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-white opacity-10 rounded-full blur-2xl"></div>
+        <div className="relative z-10">
+            <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest mb-1">區間總花費 (NTD)</p>
+            <div className="flex items-baseline gap-1">
+                <span className="text-lg opacity-80">NT$</span>
+                <span className="text-4xl font-bold font-mono tracking-tight">{stats.totalSpent.toLocaleString()}</span>
+            </div>
+            <p className="text-indigo-200 text-xs mt-2 font-mono">
+                約 ¥{stats.totalJpy.toLocaleString()}
+            </p>
+        </div>
+      </div>
+
       {/* Date Range Filter */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 shadow-sm">
         <div className="flex items-center gap-2 mb-3">
@@ -96,29 +176,14 @@ export const StatsView: React.FC<StatsViewProps> = ({ history }) => {
         </div>
       </div>
 
-      {/* Grand Total Card */}
-      <div className="bg-gradient-to-br from-indigo-600 to-violet-600 rounded-2xl p-6 text-white shadow-xl shadow-indigo-200 mb-8 relative overflow-hidden">
-        <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-white opacity-10 rounded-full blur-2xl"></div>
-        <div className="relative z-10">
-            <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest mb-1">區間總花費 (NTD)</p>
-            <div className="flex items-baseline gap-1">
-                <span className="text-lg opacity-80">NT$</span>
-                <span className="text-4xl font-bold font-mono tracking-tight">{stats.totalSpent.toLocaleString()}</span>
-            </div>
-            <p className="text-indigo-200 text-xs mt-2 font-mono">
-                約 ¥{stats.totalJpy.toLocaleString()}
-            </p>
-        </div>
-      </div>
-
       {/* Category Breakdown */}
       {stats.categories.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">
+          <div className="text-center py-12 text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200 mb-8">
              <CalendarIcon className="w-10 h-10 mx-auto mb-3 opacity-20" />
              <p className="text-sm">此日期區間尚無紀錄</p>
           </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-6 mb-12">
             <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">分類消費佔比</h3>
             <div className="space-y-4">
                 {stats.categories.map((cat) => {
@@ -153,6 +218,62 @@ export const StatsView: React.FC<StatsViewProps> = ({ history }) => {
             </div>
         </div>
       )}
+
+      {/* iCloud Backup Section */}
+      <div className="mt-8 bg-indigo-50 border border-indigo-100 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-1">
+              <FileJson className="w-4 h-4 text-indigo-600" />
+              <h4 className="text-sm font-bold text-slate-800">iCloud 備份與還原</h4>
+          </div>
+          <p className="text-[10px] text-indigo-400 mb-4 leading-relaxed">
+              將所有紀錄備份至 iCloud 雲端硬碟，或在換手機時還原資料。
+          </p>
+          
+          <div className="grid grid-cols-2 gap-3">
+              <button 
+                  onClick={handleExport}
+                  className="flex items-center justify-center gap-2 bg-white border border-indigo-200 text-indigo-600 py-3 rounded-xl text-xs font-bold shadow-sm active:scale-95 transition-all"
+              >
+                  <Download className="w-3.5 h-3.5" />
+                  備份至 iCloud
+              </button>
+              <label className="flex items-center justify-center gap-2 bg-indigo-600 text-white py-3 rounded-xl text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer">
+                  <Upload className="w-3.5 h-3.5" />
+                  還原備份檔
+                  <input type="file" accept=".json" className="hidden" onChange={handleImport} />
+              </label>
+          </div>
+      </div>
+
+      {/* Storage Diagnostic Section */}
+      <div className="mt-12 pt-8 border-t border-slate-100">
+          <div className="flex items-center gap-2 mb-4">
+              <Database className="w-4 h-4 text-slate-400" />
+              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">系統資料診斷</h4>
+          </div>
+          
+          {storageDiagnostic ? (
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-3">
+                  <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">目前模式</span>
+                      <span className={`text-xs font-bold flex items-center gap-1 ${userId ? 'text-green-600' : 'text-amber-600'}`}>
+                          {userId ? <ShieldCheck className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                          {storageDiagnostic.mode}
+                      </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">儲存空間佔用</span>
+                      <span className="text-xs font-mono font-bold text-slate-700">{storageDiagnostic.sizeKb} KB</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">資料庫筆數</span>
+                      <span className="text-xs font-mono font-bold text-slate-700">{storageDiagnostic.count} 筆明細</span>
+                  </div>
+              </div>
+          ) : (
+              <p className="text-xs text-slate-400 italic">正在獲取資料狀態...</p>
+          )}
+      </div>
     </div>
   );
 };

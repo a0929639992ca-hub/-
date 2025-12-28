@@ -9,12 +9,13 @@ import { translateReceipt } from './services/geminiService';
 import { saveReceiptToHistory, getHistory, deleteFromHistory, syncLocalToCloud } from './services/historyService';
 import { getCurrentUser, logout } from './services/authService';
 import { AppState, ReceiptAnalysis, User } from './types';
-import { ScrollText, Sparkles, History, Calculator, PieChart, ScanLine, ShoppingBag, User as UserIcon, Cloud, Check, Upload, RefreshCw } from 'lucide-react';
+import { ScrollText, Sparkles, History, Calculator, PieChart, ScanLine, ShoppingBag, User as UserIcon, Cloud, Check, Upload, RefreshCw, Database } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [user, setUser] = useState<User | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showToast, setShowToast] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -45,6 +46,11 @@ const App: React.FC = () => {
     }
   };
 
+  const triggerToast = () => {
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
   const handleCapture = useCallback(async (imageData: string) => {
     setCapturedImage(imageData);
     setAppState(AppState.ANALYZING);
@@ -67,10 +73,13 @@ const App: React.FC = () => {
       }
 
       const savedRecord = saveReceiptToHistory(result);
-      setHistoryList(prev => [savedRecord, ...prev]);
-
+      
+      // 重要：立即更新狀態並顯示成功回饋
+      setHistoryList(getHistory(user?.id));
       setReceiptData(savedRecord);
       setAppState(AppState.RESULT);
+      triggerToast();
+      
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "發生未知錯誤");
       setAppState(AppState.ERROR);
@@ -81,7 +90,7 @@ const App: React.FC = () => {
     if (confirm('確定要登出嗎？雲端資料將安全保留在伺服器中。')) {
       logout();
       setUser(null);
-      setHistoryList(getHistory()); // 切換回本地空紀錄
+      setHistoryList(getHistory()); 
       setAppState(AppState.IDLE);
     }
   };
@@ -95,6 +104,16 @@ const App: React.FC = () => {
           backgroundImage: 'radial-gradient(#CBD5E1 1px, transparent 1px)',
           backgroundSize: '24px 24px'
       }}></div>
+
+      {/* Success Toast */}
+      {showToast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-top duration-300">
+            <div className="bg-green-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 border border-green-500">
+                <Check className="w-5 h-5" />
+                <span className="font-bold text-sm">資料已成功儲存！</span>
+            </div>
+        </div>
+      )}
 
       {showBottomNav && (
         <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-[#FDFDFD]/80 border-b border-slate-100">
@@ -165,7 +184,7 @@ const App: React.FC = () => {
 
         {(appState === AppState.IDLE || appState === AppState.ERROR) && (
           <div className="px-4 py-6 flex flex-col gap-5 animate-in fade-in duration-300">
-            {/* Sync Banner for non-logged in users */}
+            {/* Sync Banner */}
             {!user && (
                 <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-2xl p-4 text-white shadow-lg shadow-indigo-100 flex items-center justify-between">
                     <div>
@@ -266,7 +285,11 @@ const App: React.FC = () => {
                         </div>
                    )}
                 </div>
-                <StatsView history={historyList} />
+                <StatsView 
+                    history={historyList} 
+                    userId={user?.id} 
+                    onDataRefresh={(newList) => setHistoryList(newList)}
+                />
             </div>
         )}
 
