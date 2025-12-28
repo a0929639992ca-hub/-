@@ -1,5 +1,5 @@
-import { ReceiptAnalysis } from "../types";
-import { getCurrentUser } from "./authService";
+import { ReceiptAnalysis } from "./types";
+import { getCurrentUser } from "./services/authService";
 
 const STORAGE_KEYS = {
   CURRENT_LOCAL: 'japan_receipt_history_v1',
@@ -8,6 +8,9 @@ const STORAGE_KEYS = {
   VERSION: '1.3'
 };
 
+/**
+ * 取得歷史紀錄。由於此檔案位於根目錄，匯入路徑已修正。
+ */
 export const getHistory = (): ReceiptAnalysis[] => {
   const user = getCurrentUser();
   const storageKey = user ? `${STORAGE_KEYS.CLOUD_PREFIX}${user.id}` : STORAGE_KEYS.CURRENT_LOCAL;
@@ -22,7 +25,6 @@ export const getHistory = (): ReceiptAnalysis[] => {
     history = [];
   }
 
-  // 遷移邏輯
   if (!user && history.length === 0) {
     for (const legacyKey of STORAGE_KEYS.LEGACY_LOCAL) {
       try {
@@ -45,9 +47,7 @@ export const getHistory = (): ReceiptAnalysis[] => {
 };
 
 export const syncLocalToCloud = async (userId: string): Promise<ReceiptAnalysis[]> => {
-  // 模擬網路延遲
   await new Promise(resolve => setTimeout(resolve, 1500));
-  
   const localData = getHistory(); 
   const cloudKey = `${STORAGE_KEYS.CLOUD_PREFIX}${userId}`;
   let cloudData: ReceiptAnalysis[] = [];
@@ -71,14 +71,12 @@ export const saveReceiptToHistory = (data: ReceiptAnalysis): ReceiptAnalysis => 
   const user = getCurrentUser();
   const storageKey = user ? `${STORAGE_KEYS.CLOUD_PREFIX}${user.id}` : STORAGE_KEYS.CURRENT_LOCAL;
   const history = getHistory();
-  
   const newRecord: ReceiptAnalysis = {
     ...data,
     id: data.id || `rec_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
     timestamp: Date.now(),
     userId: user?.id 
   };
-
   const updatedHistory = [newRecord, ...history];
   localStorage.setItem(storageKey, JSON.stringify(updatedHistory));
   return newRecord;
@@ -93,7 +91,6 @@ export const deleteFromHistory = (id: string): ReceiptAnalysis[] => {
   return updated;
 };
 
-// iCloud 備份匯出功能
 export const exportToICloud = () => {
   const data = getHistory();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -105,7 +102,6 @@ export const exportToICloud = () => {
   URL.revokeObjectURL(url);
 };
 
-// iCloud 備份匯入功能
 export const importFromICloud = (file: File): Promise<ReceiptAnalysis[]> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -113,16 +109,12 @@ export const importFromICloud = (file: File): Promise<ReceiptAnalysis[]> => {
       try {
         const data = JSON.parse(e.target?.result as string);
         if (!Array.isArray(data)) throw new Error("無效的備份檔案格式");
-        
         const user = getCurrentUser();
         const storageKey = user ? `${STORAGE_KEYS.CLOUD_PREFIX}${user.id}` : STORAGE_KEYS.CURRENT_LOCAL;
         const current = getHistory();
-        
-        // 合併避免重複
         const mergedMap = new Map<string, ReceiptAnalysis>();
         current.forEach(i => mergedMap.set(i.id!, i));
         data.forEach(i => mergedMap.set(i.id!, { ...i, userId: user?.id }));
-        
         const mergedList = Array.from(mergedMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         localStorage.setItem(storageKey, JSON.stringify(mergedList));
         resolve(mergedList);
