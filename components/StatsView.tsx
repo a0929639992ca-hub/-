@@ -43,8 +43,8 @@ export const StatsView: React.FC<StatsViewProps> = ({ history }) => {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto px-4 animate-fade-in">
-      <div className="mb-8">
+    <div className="w-full max-w-md mx-auto px-4 animate-fade-in pb-24">
+      <div className="mb-8 pt-4">
         <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-6">
           <PieChart className="w-6 h-6 text-indigo-600" />
           消費分類統計

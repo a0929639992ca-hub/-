@@ -188,6 +188,7 @@ const App: React.FC = () => {
                     onSelect={(item) => { setReceiptData(item); setAppState(AppState.RESULT); }}
                     onUpdateHistory={(newList) => { setHistoryList(newList); }}
                     onBack={() => setAppState(AppState.IDLE)}
+                    isSyncing={isSyncing}
                 />
             </div>
         )}

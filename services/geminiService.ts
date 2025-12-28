@@ -83,8 +83,8 @@ export const translateReceipt = async (
             config: {
                 temperature: 0.1,
                 responseMimeType: "application/json",
-                // 為 2.5 系列模型加入思考預算以提升 OCR 解析品質
-                thinkingConfig: { thinkingBudget: 4000 }
+                // 移除 thinkingConfig 以避免 Free Tier Quota Exceeded (429) 錯誤
+                // thinkingConfig: { thinkingBudget: 4000 } 
             }
         });
     });
@@ -112,7 +112,7 @@ export const translateReceipt = async (
     
     // 針對 429 錯誤提供更友善的訊息
     if (error?.status === 429 || error?.code === 429) {
-        throw new Error("API 使用量已達上限 (Quota Exceeded)。請稍後再試，或檢查您的 Google Cloud API 配額設定。");
+        throw new Error("API 使用量已達上限 (Quota Exceeded)。建議稍後再試，或檢查 API Key 配額。");
     }
 
     if (error instanceof SyntaxError) {
@@ -130,9 +130,7 @@ export const generateShoppingReport = async (history: ReceiptAnalysis[]): Promis
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: prompt,
-      config: {
-        thinkingConfig: { thinkingBudget: 2000 }
-      }
+      // 移除 thinkingConfig 以節省 token
     });
     return response.text || "無法生成報告";
   } catch (err) {
