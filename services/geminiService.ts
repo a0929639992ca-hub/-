@@ -29,7 +29,9 @@ async function retryWithBackoff<T>(
     return await operation();
   } catch (error: any) {
     const status = error?.status || error?.code;
+    // 如果是 429 (Too Many Requests) 或 503 (Service Unavailable)，進行重試
     if (retries > 0 && (status === 429 || status === 503 || status === 500)) {
+      console.warn(`API Error ${status}, retrying in ${delay}ms...`);
       await new Promise(resolve => setTimeout(resolve, delay));
       return retryWithBackoff(operation, retries - 1, delay * 1.5);
     }
@@ -107,6 +109,12 @@ export const translateReceipt = async (
     return parsed;
   } catch (error: any) {
     console.error("Gemini OCR Error:", error);
+    
+    // 針對 429 錯誤提供更友善的訊息
+    if (error?.status === 429 || error?.code === 429) {
+        throw new Error("API 使用量已達上限 (Quota Exceeded)。請稍後再試，或檢查您的 Google Cloud API 配額設定。");
+    }
+
     if (error instanceof SyntaxError) {
         throw new Error("格式解析錯誤。請嘗試重新拍攝更清晰的照片。");
     }

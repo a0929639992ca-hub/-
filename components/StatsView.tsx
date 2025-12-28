@@ -35,8 +35,8 @@ export const StatsView: React.FC<StatsViewProps> = ({ history }) => {
     if (c.includes('精品') || c.includes('香氛')) return { icon: Sparkles, color: 'text-purple-500', bg: 'bg-purple-50', bar: 'bg-purple-500' };
     if (c.includes('伴手禮')) return { icon: Gift, color: 'text-pink-500', bg: 'bg-pink-50', bar: 'bg-pink-500' };
     if (c.includes('藥妝') || c.includes('保養') || c.includes('美妝')) return { icon: Pill, color: 'text-rose-500', bg: 'bg-rose-50', bar: 'bg-rose-500' };
-    if (c.includes('食品') || c.includes('美食')) return { icon: Utensils, color: 'text-orange-500', bg: 'bg-orange-50', bar: 'bg-orange-500' };
-    if (c.includes('零食')) return { icon: Package, color: 'text-amber-500', bg: 'bg-amber-50', bar: 'bg-amber-500' };
+    if (c.includes('食品') || c.includes('美食') || c.includes('調味')) return { icon: Utensils, color: 'text-orange-500', bg: 'bg-orange-50', bar: 'bg-orange-500' };
+    if (c.includes('零食') || c.includes('雜貨')) return { icon: Package, color: 'text-amber-500', bg: 'bg-amber-50', bar: 'bg-amber-500' };
     if (c.includes('服飾') || c.includes('配件')) return { icon: Shirt, color: 'text-blue-500', bg: 'bg-blue-50', bar: 'bg-blue-500' };
     if (c.includes('3c') || c.includes('家電')) return { icon: Smartphone, color: 'text-cyan-500', bg: 'bg-cyan-50', bar: 'bg-cyan-500' };
     return { icon: ShoppingBag, color: 'text-slate-400', bg: 'bg-slate-50', bar: 'bg-slate-400' };
