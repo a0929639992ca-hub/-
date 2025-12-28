@@ -10,7 +10,7 @@ import { translateReceipt } from './services/geminiService';
 import { saveReceiptToHistory, getHistory, deleteFromHistory, syncLocalToCloud } from './services/historyService';
 import { getCurrentUser, logout } from './services/authService';
 import { AppState, ReceiptAnalysis, User } from './types';
-import { AlertCircle, History, Calculator, PieChart, ScanLine, User as UserIcon, Check, RefreshCw, Cloud, CloudOff, CloudSync } from 'lucide-react';
+import { AlertCircle, History, Calculator, PieChart, ScanLine, User as UserIcon, Check, RefreshCw, Cloud, CloudOff } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
@@ -138,7 +138,7 @@ const App: React.FC = () => {
                           </span>
                           {user ? (
                             isSyncing ? 
-                            <CloudSync className="w-2 h-2 text-indigo-500 animate-spin" /> : 
+                            <RefreshCw className="w-2 h-2 text-indigo-500 animate-spin" /> : 
                             <Cloud className="w-2 h-2 text-green-500" />
                           ) : (
                             <CloudOff className="w-2 h-2 text-slate-300" />

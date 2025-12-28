@@ -1,4 +1,3 @@
-
 import { ReceiptAnalysis } from "../types";
 import { getCurrentUser } from "./authService";
 
