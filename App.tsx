@@ -22,18 +22,16 @@ const App: React.FC = () => {
   const [historyList, setHistoryList] = useState<ReceiptAnalysis[]>([]);
   const [customRate, setCustomRate] = useState<string>('');
 
-  // 初始化資料與工作階段
   const initializeApp = useCallback(async () => {
     const currentUser = getCurrentUser();
     setUser(currentUser);
-    
-    // 如果有使用者，確保資料已同步
     if (currentUser) {
       setIsSyncing(true);
-      await syncLocalToCloud(currentUser.id);
+      try {
+        await syncLocalToCloud(currentUser.id);
+      } catch (e) {}
       setIsSyncing(false);
     }
-    
     setHistoryList(getHistory());
   }, []);
 
@@ -59,31 +57,31 @@ const App: React.FC = () => {
 
       const result = await translateReceipt(base64Data, 'image/jpeg', rateToSend);
       
-      if (!result || !result.items || result.items.length === 0) {
-        throw new Error("辨識失敗，請確保收據清晰。");
+      if (!result || !result.items) {
+        throw new Error("辨識失敗，AI 未能取得商品清單，請再試一次。");
       }
 
-      // 補足缺漏資訊
       const now = new Date();
       if (!result.date || result.date === "未知") result.date = now.toISOString().split('T')[0];
       if (!result.time || result.time === "未知") result.time = now.toTimeString().split(' ')[0].slice(0, 5);
 
-      // 儲存（此 service 現在會根據登入狀態決定存入 Account 還是 Local）
       const savedRecord = saveReceiptToHistory(result);
       
+      // 確保資料已設定才切換畫面
       setHistoryList(getHistory());
       setReceiptData(savedRecord);
       setAppState(AppState.RESULT);
       triggerToast();
       
     } catch (err) {
+      console.error("Capture Process Error:", err);
       setErrorMsg(err instanceof Error ? err.message : "發生未知錯誤");
       setAppState(AppState.ERROR);
     }
   }, [customRate]);
 
   const handleLogout = () => {
-    if (confirm('確定要登出嗎？雲端帳號資料將被保留，切換回本地模式。')) {
+    if (confirm('確定要登出嗎？資料將保留在雲端，切換回本地模式。')) {
       logout();
       initializeApp();
       setAppState(AppState.IDLE);
@@ -91,22 +89,20 @@ const App: React.FC = () => {
   };
 
   const showBottomNav = [AppState.IDLE, AppState.HISTORY, AppState.STATS, AppState.ERROR].includes(appState);
-  const totalSpent = historyList.reduce((sum, item) => sum + item.totalTwd, 0);
+  const totalSpent = (historyList || []).reduce((sum, item) => sum + (item.totalTwd || 0), 0);
 
   return (
     <div className="min-h-screen bg-[#FDFDFD] text-slate-900 font-sans relative">
-      {/* Background patterns */}
       <div className="absolute inset-0 opacity-40 pointer-events-none" style={{
           backgroundImage: 'radial-gradient(#CBD5E1 1px, transparent 1px)',
           backgroundSize: '24px 24px'
       }}></div>
 
-      {/* Toast feedback */}
       {showToast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-top duration-300">
             <div className="bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 border border-slate-700">
                 <Check className="w-5 h-5 text-green-400" />
-                <span className="font-bold text-sm">已安全存入 {user ? '雲端帳號' : '本地儲存'}</span>
+                <span className="font-bold text-sm">已存入 {user ? '雲端帳號' : '本地儲存'}</span>
             </div>
         </div>
       )}
@@ -122,7 +118,7 @@ const App: React.FC = () => {
                         <h1 className="text-base font-bold text-slate-800">日本購物記帳</h1>
                         <div className="flex items-center gap-1 mt-0.5">
                             <span className={`text-[9px] font-bold uppercase tracking-tighter ${user ? 'text-indigo-600' : 'text-slate-400'}`}>
-                                {user ? `Member: ${user.name}` : 'Local Device Only'}
+                                {user ? `Member: ${user.name}` : 'Local Device Mode'}
                             </span>
                         </div>
                     </div>
@@ -161,7 +157,7 @@ const App: React.FC = () => {
         )}
 
         {(appState === AppState.IDLE || appState === AppState.ERROR) && (
-          <div className="px-4 py-6 flex flex-col gap-5 animate-in fade-in">
+          <div className="px-4 py-6 flex flex-col gap-5">
             <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 shadow-sm">
                 <div className="p-2 bg-slate-100 rounded-lg text-slate-500"><Calculator className="w-5 h-5" /></div>
                 <div className="flex-1">
@@ -173,7 +169,7 @@ const App: React.FC = () => {
                 <CameraCapture onCapture={handleCapture} />
             </div>
             {appState === AppState.ERROR && (
-                <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-center text-sm font-bold">
+                <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-center text-sm font-bold animate-in zoom-in-95 duration-200">
                     {errorMsg}
                 </div>
             )}
@@ -201,7 +197,7 @@ const App: React.FC = () => {
         {appState === AppState.ANALYZING && <LoadingScreen />}
 
         {appState === AppState.RESULT && receiptData && (
-            <div className="fixed inset-0 z-50 bg-[#FDFDFD] overflow-y-auto">
+            <div className="fixed inset-0 z-50 bg-[#FDFDFD] overflow-y-auto animate-in fade-in duration-300">
                  <div className="max-w-md mx-auto pt-2 px-4">
                     <ResultView 
                         originalImage={capturedImage}
