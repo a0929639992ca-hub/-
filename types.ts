@@ -34,6 +34,6 @@ export enum AppState {
   RESULT = 'RESULT',
   HISTORY = 'HISTORY',
   STATS = 'STATS',
-  AUTH = 'AUTH', // 新增登入狀態
+  AUTH = 'AUTH',
   ERROR = 'ERROR'
 }

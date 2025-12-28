@@ -58,7 +58,7 @@ const App: React.FC = () => {
       const result = await translateReceipt(base64Data, 'image/jpeg', rateToSend);
       
       if (!result || !result.items || result.items.length === 0) {
-        throw new Error("AI 未能從照片中讀取到商品清單。請確保收據攤平且文字清晰後重試。");
+        throw new Error("AI 未能辨識出商品內容，請確保收據清晰且光線充足。");
       }
 
       const savedRecord = saveReceiptToHistory(result);
@@ -69,13 +69,13 @@ const App: React.FC = () => {
       
     } catch (err) {
       console.error("Analysis Failed:", err);
-      setErrorMsg(err instanceof Error ? err.message : "辨識過程發生異常，請更換光線環境後重試");
+      setErrorMsg(err instanceof Error ? err.message : "辨識發生異常，請重試");
       setAppState(AppState.ERROR);
     }
   }, [customRate]);
 
   const handleLogout = () => {
-    if (confirm('確定要登出嗎？雲端資料將被安全保留。')) {
+    if (confirm('確定要登出嗎？資料將保留於雲端。')) {
       logout();
       initializeApp();
       setAppState(AppState.IDLE);
@@ -96,7 +96,7 @@ const App: React.FC = () => {
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-top duration-300">
             <div className="bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 border border-slate-700">
                 <Check className="w-5 h-5 text-green-400" />
-                <span className="font-bold text-sm">已存入 {user ? '雲端帳號' : '本地儲存'}</span>
+                <span className="font-bold text-sm">已存入紀錄</span>
             </div>
         </div>
       )}
@@ -109,9 +109,9 @@ const App: React.FC = () => {
                         <span className="font-bold text-lg">J</span>
                     </div>
                     <div className="flex flex-col leading-none">
-                        <h1 className="text-sm font-bold text-slate-800">日本購物助手</h1>
-                        <span className={`text-[8px] font-bold uppercase tracking-widest ${user ? 'text-indigo-600' : 'text-slate-400'}`}>
-                            {user ? user.name : 'LOCAL DEVICE'}
+                        <h1 className="text-sm font-bold text-slate-800">日本購物記帳</h1>
+                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                            {user ? user.name : 'LOCAL MODE'}
                         </span>
                     </div>
                 </div>
@@ -123,7 +123,7 @@ const App: React.FC = () => {
                         </button>
                     ) : (
                         <button onClick={() => setAppState(AppState.AUTH)} className="px-3 py-1.5 bg-indigo-50 border border-indigo-100 rounded-full text-indigo-600">
-                            <span className="text-[10px] font-bold">登入帳號</span>
+                            <span className="text-[10px] font-bold">登入</span>
                         </button>
                     )}
                     <div className="bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
@@ -153,7 +153,7 @@ const App: React.FC = () => {
             <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 shadow-sm">
                 <div className="p-2 bg-slate-100 rounded-lg text-slate-500"><Calculator className="w-5 h-5" /></div>
                 <div className="flex-1">
-                    <label className="text-xs font-bold text-slate-500 block mb-0.5 uppercase tracking-wider">今日日幣匯率</label>
+                    <label className="text-xs font-bold text-slate-500 block mb-0.5 uppercase tracking-wider">自訂今日匯率</label>
                     <input type="number" step="0.001" placeholder="0.25" value={customRate} onChange={(e) => setCustomRate(e.target.value)} className="w-full text-lg font-mono font-bold text-slate-800 bg-transparent focus:outline-none" />
                 </div>
             </div>
@@ -161,29 +161,23 @@ const App: React.FC = () => {
                 <CameraCapture onCapture={handleCapture} />
             </div>
             <p className="text-[10px] text-center text-slate-400 px-8 leading-relaxed">
-                提示：請將收據攤平拍攝，確保「商品名」與「金額」清晰可見。<br/>Gemini Nano Banana 將為您自動分類。
+                拍攝日本收據，Gemini 會為您自動翻譯並分類記帳。
             </p>
           </div>
         )}
 
         {appState === AppState.ERROR && (
             <div className="px-6 py-12 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
-                <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6 shadow-inner">
+                <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6">
                     <AlertCircle className="w-10 h-10" />
                 </div>
-                <h2 className="text-xl font-bold text-slate-800 mb-3">辨識發生異常</h2>
+                <h2 className="text-xl font-bold text-slate-800 mb-3">辨識失敗</h2>
                 <div className="bg-red-50/50 border border-red-100 p-5 rounded-2xl mb-8 w-full">
-                    <p className="text-sm text-red-600 font-medium leading-relaxed">{errorMsg}</p>
+                    <p className="text-sm text-red-600 font-medium">{errorMsg}</p>
                 </div>
-
-                <div className="flex flex-col gap-3 w-full">
-                    <button onClick={() => setAppState(AppState.IDLE)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg shadow-indigo-100 flex items-center justify-center gap-2 active:scale-95 transition-transform">
-                        <RefreshCw className="w-5 h-5" /> 重新拍攝
-                    </button>
-                    <button onClick={() => setAppState(AppState.HISTORY)} className="w-full py-4 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold flex items-center justify-center gap-2">
-                        <ArrowLeft className="w-5 h-5" /> 查看過往紀錄
-                    </button>
-                </div>
+                <button onClick={() => setAppState(AppState.IDLE)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform">
+                    <RefreshCw className="w-5 h-5" /> 重新拍攝
+                </button>
             </div>
         )}
 
@@ -194,18 +188,13 @@ const App: React.FC = () => {
                     onSelect={(item) => { setReceiptData(item); setAppState(AppState.RESULT); }}
                     onUpdateHistory={(newList) => { setHistoryList(newList); }}
                     onBack={() => setAppState(AppState.IDLE)}
-                    isSyncing={isSyncing}
                 />
             </div>
         )}
 
         {appState === AppState.STATS && (
             <div className="py-6">
-                <StatsView 
-                  history={historyList} 
-                  userId={user?.id} 
-                  onDataRefresh={(newList) => setHistoryList(newList)} 
-                />
+                <StatsView history={historyList} />
             </div>
         )}
 
@@ -228,9 +217,9 @@ const App: React.FC = () => {
       {showBottomNav && (
         <div className="fixed bottom-0 left-0 w-full z-40 bg-white border-t border-slate-100 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
             <div className="max-w-md mx-auto flex justify-around items-center h-20">
-                <NavButton active={appState === AppState.IDLE} onClick={() => setAppState(AppState.IDLE)} icon={ScanLine} label="掃描辨識" />
-                <NavButton active={appState === AppState.HISTORY} onClick={() => setAppState(AppState.HISTORY)} icon={History} label="歷史清單" />
-                <NavButton active={appState === AppState.STATS} onClick={() => setAppState(AppState.STATS)} icon={PieChart} label="分類統計" />
+                <NavButton active={appState === AppState.IDLE} onClick={() => setAppState(AppState.IDLE)} icon={ScanLine} label="掃描" />
+                <NavButton active={appState === AppState.HISTORY} onClick={() => setAppState(AppState.HISTORY)} icon={History} label="歷史" />
+                <NavButton active={appState === AppState.STATS} onClick={() => setAppState(AppState.STATS)} icon={PieChart} label="統計" />
             </div>
         </div>
       )}
