@@ -3,24 +3,26 @@ import { CameraCapture } from './components/CameraCapture';
 import { ResultView } from './components/ResultView';
 import { LoadingScreen } from './components/LoadingScreen';
 import { HistoryList } from './components/HistoryList';
-import { StatsView } from './components/StatsView'; // Import StatsView
+import { StatsView } from './components/StatsView';
+import { AuthView } from './components/AuthView';
 import { translateReceipt } from './services/geminiService';
 import { saveReceiptToHistory, getHistory, deleteFromHistory } from './services/historyService';
-import { AppState, ReceiptAnalysis } from './types';
-import { ScrollText, Sparkles, History, Receipt, Calculator, PieChart, ScanLine, ShoppingBag } from 'lucide-react';
+import { getCurrentUser, logout } from './services/authService';
+import { AppState, ReceiptAnalysis, User } from './types';
+import { ScrollText, Sparkles, History, Calculator, PieChart, ScanLine, ShoppingBag, User as UserIcon, LogOut } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
+  const [user, setUser] = useState<User | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [historyList, setHistoryList] = useState<ReceiptAnalysis[]>([]);
-  
-  // Manual Exchange Rate State
   const [customRate, setCustomRate] = useState<string>('');
 
   useEffect(() => {
     setHistoryList(getHistory());
+    setUser(getCurrentUser());
   }, []);
 
   const handleCapture = useCallback(async (imageData: string) => {
@@ -30,17 +32,19 @@ const App: React.FC = () => {
 
     try {
       const base64Data = imageData.split(',')[1];
-      
       let rateToSend: number | undefined = undefined;
       const parsedRate = parseFloat(customRate);
-      if (!isNaN(parsedRate) && parsedRate > 0) {
-        rateToSend = parsedRate;
-      }
+      if (!isNaN(parsedRate) && parsedRate > 0) rateToSend = parsedRate;
 
       const result = await translateReceipt(base64Data, 'image/jpeg', rateToSend);
       
       if (!result || result.items.length === 0) {
         throw new Error("無法辨識任何商品，請靠近一點拍攝。");
+      }
+
+      // If user is logged in, associate this record with user
+      if (user) {
+        result.userId = user.id;
       }
 
       const savedRecord = saveReceiptToHistory(result);
@@ -49,73 +53,83 @@ const App: React.FC = () => {
       setReceiptData(savedRecord);
       setAppState(AppState.RESULT);
     } catch (err) {
-      console.error(err);
-      setErrorMsg(err instanceof Error ? err.message : "發生未知錯誤，請重試");
+      setErrorMsg(err instanceof Error ? err.message : "發生未知錯誤");
       setAppState(AppState.ERROR);
     }
-  }, [customRate]);
+  }, [customRate, user]);
 
-  const selectHistoryItem = (item: ReceiptAnalysis) => {
-    setReceiptData(item);
-    setCapturedImage(null);
-    setAppState(AppState.RESULT);
-  };
-
-  const deleteHistoryItem = (id: string) => {
-    const updated = deleteFromHistory(id);
-    setHistoryList(updated);
-    if (receiptData && receiptData.id === id) {
-        // If deleting from result view, go back to history
-        setAppState(AppState.HISTORY);
+  const handleLogout = () => {
+    if (confirm('確定要登出嗎？資料將保留在本地設備。')) {
+      logout();
+      setUser(null);
+      setAppState(AppState.IDLE);
     }
   };
 
-  // Check if we should show the bottom nav
   const showBottomNav = [AppState.IDLE, AppState.HISTORY, AppState.STATS, AppState.ERROR].includes(appState);
-
-  // Calculate current trip total for header
   const totalSpent = historyList.reduce((sum, item) => sum + item.totalTwd, 0);
 
   return (
     <div className="min-h-screen bg-[#FDFDFD] text-slate-900 font-sans relative">
-      {/* Background Pattern */}
       <div className="absolute inset-0 opacity-40 pointer-events-none" style={{
           backgroundImage: 'radial-gradient(#CBD5E1 1px, transparent 1px)',
           backgroundSize: '24px 24px'
       }}></div>
 
-      {/* Header (Only show on Main Tabs) */}
       {showBottomNav && (
         <header className="sticky top-0 z-40 w-full backdrop-blur-sm bg-[#FDFDFD]/80 border-b border-slate-100">
             <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-200">
-                    <span className="font-bold text-lg">J</span>
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-200">
+                        <span className="font-bold text-lg">J</span>
+                    </div>
+                    <div className="flex flex-col leading-none">
+                        <h1 className="text-base font-bold text-slate-800">
+                            日本購物<span className="text-indigo-600">記帳</span>
+                        </h1>
+                    </div>
                 </div>
-                <div className="flex flex-col leading-none">
-                    <h1 className="text-base font-bold text-slate-800">
-                        日本購物<span className="text-indigo-600">記帳</span>
-                    </h1>
+                
+                <div className="flex items-center gap-3">
+                    {user ? (
+                        <button 
+                            onClick={handleLogout}
+                            className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 text-slate-500 overflow-hidden"
+                            title={user.name}
+                        >
+                            <UserIcon className="w-4 h-4" />
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={() => setAppState(AppState.AUTH)}
+                            className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center border border-indigo-100 text-indigo-600"
+                        >
+                            <UserIcon className="w-4 h-4" />
+                        </button>
+                    )}
+                    
+                    <div className="flex items-center gap-2 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
+                        <ShoppingBag className="w-3 h-3 text-slate-500" />
+                        <span className="text-xs font-bold text-slate-700 font-mono">NT$ {totalSpent.toLocaleString()}</span>
+                    </div>
                 </div>
-            </div>
-            
-            {/* Total Budget Pill */}
-            <div className="flex items-center gap-2 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
-                <ShoppingBag className="w-3 h-3 text-slate-500" />
-                <span className="text-xs font-bold text-slate-700 font-mono">NT$ {totalSpent.toLocaleString()}</span>
-            </div>
             </div>
         </header>
       )}
 
-      {/* Main Content Area */}
       <main className="max-w-md mx-auto relative z-10 pb-24">
-        
-        {/* State: IDLE / ERROR (Scan Tab) */}
+        {appState === AppState.AUTH && (
+          <AuthView 
+            onLoginSuccess={(u) => {
+              setUser(u);
+              setAppState(AppState.IDLE);
+            }} 
+            onBack={() => setAppState(AppState.IDLE)} 
+          />
+        )}
+
         {(appState === AppState.IDLE || appState === AppState.ERROR) && (
           <div className="px-4 py-6 flex flex-col gap-5 animate-in fade-in duration-300">
-            
-            {/* Exchange Rate Setting */}
             <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 shadow-sm">
                 <div className="p-2 bg-slate-100 rounded-lg text-slate-500">
                     <Calculator className="w-5 h-5" />
@@ -164,31 +178,28 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* State: HISTORY */}
         {appState === AppState.HISTORY && (
             <div className="py-6 px-2">
                 <HistoryList 
                     history={historyList}
-                    onSelect={selectHistoryItem}
+                    onSelect={(item) => {
+                        setReceiptData(item);
+                        setAppState(AppState.RESULT);
+                    }}
                     onUpdateHistory={setHistoryList}
                     onBack={() => setAppState(AppState.IDLE)}
                 />
             </div>
         )}
 
-        {/* State: STATS (New) */}
         {appState === AppState.STATS && (
             <div className="py-6">
                 <StatsView history={historyList} />
             </div>
         )}
 
-        {/* State: ANALYZING (Overlay) */}
-        {appState === AppState.ANALYZING && (
-          <LoadingScreen />
-        )}
+        {appState === AppState.ANALYZING && <LoadingScreen />}
 
-        {/* State: RESULT (Overlay) */}
         {appState === AppState.RESULT && receiptData && (
             <div className="fixed inset-0 z-50 bg-[#FDFDFD] overflow-y-auto">
                  <div className="max-w-md mx-auto pt-2 px-4">
@@ -196,24 +207,21 @@ const App: React.FC = () => {
                         originalImage={capturedImage}
                         data={receiptData} 
                         onRetake={() => {
-                            if (capturedImage) {
-                                if(confirm("返回後將清除本次掃描畫面（資料已自動儲存）。確定返回嗎？")) {
-                                    setAppState(AppState.IDLE);
-                                    setCapturedImage(null);
-                                    setReceiptData(null);
-                                }
-                            } else {
-                                setAppState(AppState.HISTORY);
-                            }
+                            setAppState(AppState.IDLE);
+                            setCapturedImage(null);
+                            setReceiptData(null);
                         }}
-                        onDelete={deleteHistoryItem}
+                        onDelete={(id) => {
+                            const updated = deleteFromHistory(id);
+                            setHistoryList(updated);
+                            setAppState(AppState.HISTORY);
+                        }}
                     />
                 </div>
             </div>
         )}
       </main>
 
-      {/* Bottom Navigation Bar */}
       {showBottomNav && (
         <div className="fixed bottom-0 left-0 w-full z-40 bg-white border-t border-slate-200 pb-safe">
             <div className="max-w-md mx-auto flex justify-around items-center">
