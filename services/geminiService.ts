@@ -1,8 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { ReceiptAnalysis } from "../types";
 
-// 使用使用者要求的 Nano Banana 系列模型 (2.5 Flash Image)
-const MODEL_NAME = 'gemini-2.5-flash-image';
+// 改用 Gemini 3 Flash：這是最新的高效率模型，配額比 Pro 多，且比 2.5 更聰明
+const MODEL_NAME = 'gemini-3-flash-preview';
 
 const cleanJsonString = (text: string): string => {
   if (!text) return "";
@@ -83,8 +83,7 @@ export const translateReceipt = async (
             config: {
                 temperature: 0.1,
                 responseMimeType: "application/json",
-                // 移除 thinkingConfig 以避免 Free Tier Quota Exceeded (429) 錯誤
-                // thinkingConfig: { thinkingBudget: 4000 } 
+                // 移除 thinkingConfig 以節省 token 並避免 429 錯誤
             }
         });
     });
@@ -112,7 +111,7 @@ export const translateReceipt = async (
     
     // 針對 429 錯誤提供更友善的訊息
     if (error?.status === 429 || error?.code === 429) {
-        throw new Error("API 使用量已達上限 (Quota Exceeded)。建議稍後再試，或檢查 API Key 配額。");
+        throw new Error("API 使用量已達上限 (Quota Exceeded)。請稍等幾分鐘後再試，這通常是免費版 API 的限制。");
     }
 
     if (error instanceof SyntaxError) {
@@ -130,7 +129,6 @@ export const generateShoppingReport = async (history: ReceiptAnalysis[]): Promis
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: prompt,
-      // 移除 thinkingConfig 以節省 token
     });
     return response.text || "無法生成報告";
   } catch (err) {
