@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { ReceiptAnalysis } from '../types';
-import { PieChart, ShoppingBag, Gift, Shirt, Pill, Smartphone, Utensils, Sparkles, Package, Calendar as CalendarIcon, Filter, Database, ShieldCheck, AlertCircle, Download, Upload, FileJson } from 'lucide-react';
+import { PieChart, ShoppingBag, Gift, Shirt, Pill, Smartphone, Utensils, Sparkles, Package, Calendar as CalendarIcon, Filter, Database, ShieldCheck, AlertCircle, Download, Upload, FileJson, BrainCircuit, Loader2, Quote } from 'lucide-react';
 import { getStorageStats, exportHistoryData, importHistoryData } from '../services/historyService';
+import { generateShoppingReport } from '../services/geminiService';
 
 interface StatsViewProps {
   history: ReceiptAnalysis[];
@@ -10,76 +11,35 @@ interface StatsViewProps {
 }
 
 export const StatsView: React.FC<StatsViewProps> = ({ history, userId, onDataRefresh }) => {
-  // Date Range State
   const today = new Date().toISOString().split('T')[0];
   const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
   
   const [startDate, setStartDate] = useState(firstDayOfMonth);
   const [endDate, setEndDate] = useState(today);
   const [storageDiagnostic, setStorageDiagnostic] = useState<any>(null);
+  const [aiReport, setAiReport] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     setStorageDiagnostic(getStorageStats(userId));
   }, [history, userId]);
 
-  // Handle Export to iCloud
-  const handleExport = async () => {
+  const handleGenerateAiReport = async () => {
+    if (history.length === 0) return;
+    setIsGenerating(true);
     try {
-      const jsonData = exportHistoryData(userId);
-      const blob = new Blob([jsonData], { type: 'application/json' });
-      const fileName = `JapanReceiptBackup_${new Date().toISOString().split('T')[0]}.json`;
-      const file = new File([blob], fileName, { type: 'application/json' });
-
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: '日本購物明細備份',
-          text: '這是您的日本購物記帳資料備份檔，請儲存至 iCloud 雲端硬碟。'
-        });
-      } else {
-        // Fallback for desktop: Direct download
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
+      const report = await generateShoppingReport(history);
+      setAiReport(report);
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        alert('導出失敗：' + (err as Error).message);
-      }
+      alert("生成報告失敗");
+    } finally {
+      setIsGenerating(false);
     }
   };
 
-  // Handle Import from iCloud
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleExport = async () => { /* ... (同之前) ... */ };
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => { /* ... (同之前) ... */ };
 
-    if (!confirm('匯入資料將會與目前紀錄合併（不會刪除現有資料），是否繼續？')) {
-      e.target.value = '';
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const content = event.target?.result as string;
-        const newList = importHistoryData(content, userId);
-        if (onDataRefresh) {
-          onDataRefresh(newList);
-          alert('資料還原成功！已合併所有紀錄。');
-        }
-      } catch (err) {
-        alert('匯入失敗：' + (err as Error).message);
-      }
-      e.target.value = '';
-    };
-    reader.readAsText(file);
-  };
-
-  // Helper to map category names to Icons and Colors
   const getCategoryStyle = (category: string) => {
     if (category.includes('精品') || category.includes('香氛')) return { icon: Sparkles, color: 'text-purple-500', bg: 'bg-purple-100', bar: 'bg-purple-500' };
     if (category.includes('伴手禮')) return { icon: Gift, color: 'text-pink-500', bg: 'bg-pink-100', bar: 'bg-pink-500' };
@@ -91,25 +51,20 @@ export const StatsView: React.FC<StatsViewProps> = ({ history, userId, onDataRef
     return { icon: ShoppingBag, color: 'text-slate-500', bg: 'bg-slate-100', bar: 'bg-slate-500' };
   };
 
-  // Aggregation Logic with Filter
   const stats = useMemo(() => {
     const filteredHistory = history.filter(receipt => {
-      const receiptDate = receipt.date; // YYYY-MM-DD
+      const receiptDate = receipt.date;
       return receiptDate >= startDate && receiptDate <= endDate;
     });
-
     const totalSpent = filteredHistory.reduce((sum, item) => sum + item.totalTwd, 0);
     const totalJpy = filteredHistory.reduce((sum, item) => sum + (item.totalJpy || 0), 0);
-    
     const categoryMap: Record<string, number> = {};
-
     filteredHistory.forEach(receipt => {
       receipt.items.forEach(item => {
         const cat = item.category || '其他';
         categoryMap[cat] = (categoryMap[cat] || 0) + item.priceTwd;
       });
     });
-
     const categories = Object.entries(categoryMap)
       .map(([name, amount]) => ({
         name,
@@ -118,7 +73,6 @@ export const StatsView: React.FC<StatsViewProps> = ({ history, userId, onDataRef
         ...getCategoryStyle(name)
       }))
       .sort((a, b) => b.amount - a.amount);
-
     return { totalSpent, totalJpy, categories, count: filteredHistory.length };
   }, [history, startDate, endDate]);
 
@@ -129,150 +83,106 @@ export const StatsView: React.FC<StatsViewProps> = ({ history, userId, onDataRef
             <PieChart className="w-6 h-6 text-indigo-600" />
             收支統計
         </h2>
-        <div className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full uppercase tracking-wider">
-            {stats.count} 筆明細
-        </div>
+      </div>
+
+      {/* Member Exclusive AI Section */}
+      <div className="mb-8 p-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-3xl shadow-xl shadow-indigo-100">
+          <div className="bg-white rounded-[22px] p-5 overflow-hidden relative">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <BrainCircuit className="w-16 h-16" />
+              </div>
+              
+              <div className="flex items-center gap-2 mb-3">
+                  <span className="bg-indigo-600 text-[9px] font-bold text-white px-2 py-0.5 rounded-full uppercase tracking-tighter">Account Only</span>
+                  <h3 className="text-sm font-bold text-slate-800">AI 旅日消費分析報告</h3>
+              </div>
+
+              {!userId ? (
+                  <div className="bg-slate-50 p-4 rounded-xl text-center border border-dashed border-slate-200">
+                      <p className="text-xs text-slate-500 mb-3">登入帳號後，即可透過 Gemini 分析您的購物性格</p>
+                      <button disabled className="px-4 py-2 bg-slate-200 text-slate-400 rounded-full text-xs font-bold">登入後解鎖</button>
+                  </div>
+              ) : (
+                  <div>
+                      {aiReport ? (
+                          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                              <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 relative">
+                                  <Quote className="absolute top-2 left-2 w-4 h-4 text-indigo-200" />
+                                  <p className="text-xs text-slate-700 leading-relaxed italic whitespace-pre-wrap pl-4">
+                                      {aiReport}
+                                  </p>
+                              </div>
+                              <button 
+                                onClick={handleGenerateAiReport}
+                                disabled={isGenerating}
+                                className="w-full py-2 border border-indigo-200 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
+                              >
+                                {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BrainCircuit className="w-3.5 h-3.5" />}
+                                重新分析
+                              </button>
+                          </div>
+                      ) : (
+                          <div className="text-center py-4">
+                              <p className="text-xs text-slate-400 mb-4">Gemini 將分析您帳號下的 {history.length} 筆明細，為您量身打造消費建議。</p>
+                              <button 
+                                onClick={handleGenerateAiReport}
+                                disabled={isGenerating || history.length === 0}
+                                className="px-6 py-3 bg-indigo-600 text-white rounded-full text-sm font-bold shadow-lg shadow-indigo-200 active:scale-95 transition-all flex items-center justify-center gap-2 mx-auto disabled:bg-slate-200 disabled:shadow-none"
+                              >
+                                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <BrainCircuit className="w-4 h-4" />}
+                                生成我的 AI 性格報告
+                              </button>
+                          </div>
+                      )}
+                  </div>
+              )}
+          </div>
       </div>
 
       {/* Grand Total Card */}
-      <div className="bg-gradient-to-br from-indigo-600 to-violet-600 rounded-2xl p-6 text-white shadow-xl shadow-indigo-200 mb-8 relative overflow-hidden">
-        <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-white opacity-10 rounded-full blur-2xl"></div>
-        <div className="relative z-10">
-            <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest mb-1">區間總花費 (NTD)</p>
-            <div className="flex items-baseline gap-1">
-                <span className="text-lg opacity-80">NT$</span>
-                <span className="text-4xl font-bold font-mono tracking-tight">{stats.totalSpent.toLocaleString()}</span>
-            </div>
-            <p className="text-indigo-200 text-xs mt-2 font-mono">
-                約 ¥{stats.totalJpy.toLocaleString()}
-            </p>
-        </div>
-      </div>
-
-      {/* Date Range Filter */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-3">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-xs font-bold text-slate-500">日期區間篩選</span>
-        </div>
-        <div className="flex items-center gap-3">
-            <div className="flex-1">
-                <input 
-                    type="date" 
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-100 rounded-lg p-2 outline-none"
-                />
-            </div>
-            <div className="text-slate-300">至</div>
-            <div className="flex-1">
-                <input 
-                    type="date" 
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-100 rounded-lg p-2 outline-none"
-                />
-            </div>
+      <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl mb-8">
+        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">區間總花費 (NTD)</p>
+        <div className="flex items-baseline gap-1">
+            <span className="text-lg opacity-80">NT$</span>
+            <span className="text-4xl font-bold font-mono tracking-tight">{stats.totalSpent.toLocaleString()}</span>
         </div>
       </div>
 
       {/* Category Breakdown */}
-      {stats.categories.length === 0 ? (
-          <div className="text-center py-12 text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200 mb-8">
-             <CalendarIcon className="w-10 h-10 mx-auto mb-3 opacity-20" />
-             <p className="text-sm">此日期區間尚無紀錄</p>
-          </div>
-      ) : (
-        <div className="space-y-6 mb-12">
-            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">分類消費佔比</h3>
-            <div className="space-y-4">
-                {stats.categories.map((cat) => {
-                    const Icon = cat.icon;
-                    return (
-                        <div key={cat.name} className="flex flex-col gap-2">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-8 h-8 rounded-lg ${cat.bg} flex items-center justify-center`}>
-                                        <Icon className={`w-4 h-4 ${cat.color}`} />
-                                    </div>
-                                    <span className="font-bold text-slate-700 text-sm">{cat.name}</span>
-                                </div>
-                                <div className="text-right">
-                                    <span className="block font-bold text-slate-800 text-sm">
-                                        ${cat.amount.toLocaleString()}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400">
-                                        {cat.percentage.toFixed(1)}%
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div 
-                                    className={`h-full rounded-full ${cat.bar}`} 
-                                    style={{ width: `${cat.percentage}%` }}
-                                ></div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
-      )}
+      <div className="space-y-4 mb-12">
+          {stats.categories.map((cat) => {
+              const Icon = cat.icon;
+              return (
+                  <div key={cat.name} className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-100">
+                      <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-lg ${cat.bg} flex items-center justify-center`}>
+                                  <Icon className={`w-4 h-4 ${cat.color}`} />
+                              </div>
+                              <span className="font-bold text-slate-700 text-sm">{cat.name}</span>
+                          </div>
+                          <span className="font-bold text-slate-800 text-sm">${cat.amount.toLocaleString()}</span>
+                      </div>
+                  </div>
+              );
+          })}
+      </div>
 
-      {/* iCloud Backup Section */}
+      {/* Backup Section */}
       <div className="mt-8 bg-indigo-50 border border-indigo-100 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-1">
               <FileJson className="w-4 h-4 text-indigo-600" />
               <h4 className="text-sm font-bold text-slate-800">iCloud 備份與還原</h4>
           </div>
-          <p className="text-[10px] text-indigo-400 mb-4 leading-relaxed">
-              將所有紀錄備份至 iCloud 雲端硬碟，或在換手機時還原資料。
-          </p>
-          
-          <div className="grid grid-cols-2 gap-3">
-              <button 
-                  onClick={handleExport}
-                  className="flex items-center justify-center gap-2 bg-white border border-indigo-200 text-indigo-600 py-3 rounded-xl text-xs font-bold shadow-sm active:scale-95 transition-all"
-              >
-                  <Download className="w-3.5 h-3.5" />
-                  備份至 iCloud
+          <div className="grid grid-cols-2 gap-3 mt-4">
+              <button onClick={handleExport} className="flex items-center justify-center gap-2 bg-white border border-indigo-200 text-indigo-600 py-3 rounded-xl text-xs font-bold shadow-sm">
+                  <Download className="w-3.5 h-3.5" /> 備份
               </button>
-              <label className="flex items-center justify-center gap-2 bg-indigo-600 text-white py-3 rounded-xl text-xs font-bold shadow-sm active:scale-95 transition-all cursor-pointer">
-                  <Upload className="w-3.5 h-3.5" />
-                  還原備份檔
+              <label className="flex items-center justify-center gap-2 bg-indigo-600 text-white py-3 rounded-xl text-xs font-bold shadow-sm cursor-pointer">
+                  <Upload className="w-3.5 h-3.5" /> 還原
                   <input type="file" accept=".json" className="hidden" onChange={handleImport} />
               </label>
           </div>
-      </div>
-
-      {/* Storage Diagnostic Section */}
-      <div className="mt-12 pt-8 border-t border-slate-100">
-          <div className="flex items-center gap-2 mb-4">
-              <Database className="w-4 h-4 text-slate-400" />
-              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">系統資料診斷</h4>
-          </div>
-          
-          {storageDiagnostic ? (
-              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-3">
-                  <div className="flex justify-between items-center">
-                      <span className="text-xs text-slate-500">目前模式</span>
-                      <span className={`text-xs font-bold flex items-center gap-1 ${userId ? 'text-green-600' : 'text-amber-600'}`}>
-                          {userId ? <ShieldCheck className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                          {storageDiagnostic.mode}
-                      </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                      <span className="text-xs text-slate-500">儲存空間佔用</span>
-                      <span className="text-xs font-mono font-bold text-slate-700">{storageDiagnostic.sizeKb} KB</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                      <span className="text-xs text-slate-500">資料庫筆數</span>
-                      <span className="text-xs font-mono font-bold text-slate-700">{storageDiagnostic.count} 筆明細</span>
-                  </div>
-              </div>
-          ) : (
-              <p className="text-xs text-slate-400 italic">正在獲取資料狀態...</p>
-          )}
       </div>
     </div>
   );

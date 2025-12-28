@@ -68,6 +68,15 @@ const App: React.FC = () => {
         throw new Error("無法辨識任何商品，請靠近一點拍攝。");
       }
 
+      // 檢查日期與時間，若遺失則採用當下時間 (Fallback logic)
+      const now = new Date();
+      if (!result.date || result.date === "未知" || result.date.includes("undefined")) {
+        result.date = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      }
+      if (!result.time || result.time === "未知" || result.time.includes("undefined")) {
+        result.time = now.toTimeString().split(' ')[0].slice(0, 5); // HH:mm
+      }
+
       if (user) {
         result.userId = user.id;
       }
