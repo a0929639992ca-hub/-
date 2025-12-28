@@ -1,6 +1,6 @@
 import React from 'react';
 import { ReceiptAnalysis } from '../types';
-import { Trash2, ShoppingBag, Clock } from 'lucide-react';
+import { Trash2, ShoppingBag, Clock, CloudCheck, Loader2 } from 'lucide-react';
 import { deleteFromHistory } from '../services/historyService';
 
 interface HistoryListProps {
@@ -8,14 +8,15 @@ interface HistoryListProps {
   onSelect: (item: ReceiptAnalysis) => void;
   onUpdateHistory: (newHistory: ReceiptAnalysis[]) => void;
   onBack: () => void;
+  isSyncing?: boolean;
 }
 
-export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onUpdateHistory, onBack }) => {
+export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onUpdateHistory, onBack, isSyncing }) => {
   
-  const handleDelete = (e: React.MouseEvent, id: string) => {
+  const handleDelete = (e: React.MouseEvent, id: string, userId?: string) => {
     e.stopPropagation();
-    if (confirm('確定要刪除這筆紀錄嗎？')) {
-      const updated = deleteFromHistory(id);
+    if (confirm('確定要刪除這筆紀錄嗎？雲端備份也將同步刪除。')) {
+      const updated = deleteFromHistory(id, userId);
       onUpdateHistory(updated);
     }
   };
@@ -31,9 +32,12 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
         <h2 className="text-xl font-bold text-slate-800">
           歷史消費紀錄
         </h2>
-        <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
-            共 {history.length} 筆
-        </span>
+        <div className="flex items-center gap-2">
+            {isSyncing && <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin" />}
+            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
+                共 {history.length} 筆
+            </span>
+        </div>
       </div>
 
       {history.length === 0 ? (
@@ -41,8 +45,8 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
           <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
             <ShoppingBag className="w-8 h-8 text-slate-300" />
           </div>
-          <h3 className="text-base font-bold text-slate-700 mb-1">目前沒有歷史紀錄</h3>
-          <p className="text-xs text-slate-400 mb-6">開始掃描您的第一張日本收據吧</p>
+          <h3 className="text-base font-bold text-slate-700 mb-1">目前沒有紀錄</h3>
+          <p className="text-xs text-slate-400 mb-6">掃描後明細將自動備份至雲端</p>
           <button 
              onClick={onBack}
              className="px-6 py-2 bg-indigo-600 text-white rounded-full text-sm font-bold shadow-lg shadow-indigo-200"
@@ -70,6 +74,9 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
                                 {record.time}
                             </span>
                           )}
+                          {record.userId && (
+                              <CloudCheck className="w-3 h-3 text-green-500" title="已同步至雲端" />
+                          )}
                       </div>
                       <div className="text-sm font-bold text-slate-700 truncate max-w-[140px]">
                               {getStoreName(record)}
@@ -93,7 +100,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
               </div>
                 
               <button
-                  onClick={(e) => handleDelete(e, record.id!)}
+                  onClick={(e) => handleDelete(e, record.id!, record.userId)}
                   className="absolute bottom-2 right-2 p-2 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
               >
                   <Trash2 className="w-4 h-4" />

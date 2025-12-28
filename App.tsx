@@ -6,24 +6,44 @@ import { HistoryList } from './components/HistoryList';
 import { StatsView } from './components/StatsView';
 import { AuthView } from './components/AuthView';
 import { translateReceipt } from './services/geminiService';
-import { saveReceiptToHistory, getHistory, deleteFromHistory } from './services/historyService';
+import { saveReceiptToHistory, getHistory, deleteFromHistory, syncLocalToCloud } from './services/historyService';
 import { getCurrentUser, logout } from './services/authService';
 import { AppState, ReceiptAnalysis, User } from './types';
-import { ScrollText, Sparkles, History, Calculator, PieChart, ScanLine, ShoppingBag, User as UserIcon, LogOut } from 'lucide-react';
+import { ScrollText, Sparkles, History, Calculator, PieChart, ScanLine, ShoppingBag, User as UserIcon, Cloud, CloudCheck, CloudUpload, RefreshCw } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [user, setUser] = useState<User | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [receiptData, setReceiptData] = useState<ReceiptAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [historyList, setHistoryList] = useState<ReceiptAnalysis[]>([]);
   const [customRate, setCustomRate] = useState<string>('');
 
+  // 初始化與自動同步
   useEffect(() => {
-    setHistoryList(getHistory());
-    setUser(getCurrentUser());
+    const currentUser = getCurrentUser();
+    setUser(currentUser);
+    
+    if (currentUser) {
+      handleSync(currentUser.id);
+    } else {
+      setHistoryList(getHistory());
+    }
   }, []);
+
+  const handleSync = async (userId: string) => {
+    setIsSyncing(true);
+    try {
+      const syncedData = await syncLocalToCloud(userId);
+      setHistoryList(syncedData);
+    } catch (err) {
+      console.error("Sync failed", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleCapture = useCallback(async (imageData: string) => {
     setCapturedImage(imageData);
@@ -42,7 +62,6 @@ const App: React.FC = () => {
         throw new Error("無法辨識任何商品，請靠近一點拍攝。");
       }
 
-      // If user is logged in, associate this record with user
       if (user) {
         result.userId = user.id;
       }
@@ -59,9 +78,10 @@ const App: React.FC = () => {
   }, [customRate, user]);
 
   const handleLogout = () => {
-    if (confirm('確定要登出嗎？資料將保留在本地設備。')) {
+    if (confirm('確定要登出嗎？雲端資料將安全保留在伺服器中。')) {
       logout();
       setUser(null);
+      setHistoryList(getHistory()); // 切換回本地空紀錄
       setAppState(AppState.IDLE);
     }
   };
@@ -77,7 +97,7 @@ const App: React.FC = () => {
       }}></div>
 
       {showBottomNav && (
-        <header className="sticky top-0 z-40 w-full backdrop-blur-sm bg-[#FDFDFD]/80 border-b border-slate-100">
+        <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-[#FDFDFD]/80 border-b border-slate-100">
             <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-200">
@@ -87,24 +107,38 @@ const App: React.FC = () => {
                         <h1 className="text-base font-bold text-slate-800">
                             日本購物<span className="text-indigo-600">記帳</span>
                         </h1>
+                        <div className="flex items-center gap-1 mt-0.5">
+                            {user ? (
+                                <>
+                                    <div className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-400 animate-pulse' : 'bg-green-500'}`}></div>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
+                                        {isSyncing ? 'Cloud Syncing...' : 'Cloud Active'}
+                                    </span>
+                                </>
+                            ) : (
+                                <span className="text-[9px] font-bold text-slate-300 uppercase tracking-tighter">Local Mode</span>
+                            )}
+                        </div>
                     </div>
                 </div>
                 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                     {user ? (
-                        <button 
-                            onClick={handleLogout}
-                            className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 text-slate-500 overflow-hidden"
-                            title={user.name}
-                        >
-                            <UserIcon className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                            <button 
+                                onClick={handleLogout}
+                                className="w-8 h-8 rounded-full bg-white flex items-center justify-center border border-slate-200 text-slate-500 shadow-sm"
+                            >
+                                <UserIcon className="w-4 h-4" />
+                            </button>
+                        </div>
                     ) : (
                         <button 
                             onClick={() => setAppState(AppState.AUTH)}
-                            className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center border border-indigo-100 text-indigo-600"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-100 rounded-full text-indigo-600 transition-all hover:bg-indigo-100"
                         >
-                            <UserIcon className="w-4 h-4" />
+                            <CloudUpload className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-bold">啟動雲端</span>
                         </button>
                     )}
                     
@@ -122,6 +156,7 @@ const App: React.FC = () => {
           <AuthView 
             onLoginSuccess={(u) => {
               setUser(u);
+              handleSync(u.id);
               setAppState(AppState.IDLE);
             }} 
             onBack={() => setAppState(AppState.IDLE)} 
@@ -130,12 +165,31 @@ const App: React.FC = () => {
 
         {(appState === AppState.IDLE || appState === AppState.ERROR) && (
           <div className="px-4 py-6 flex flex-col gap-5 animate-in fade-in duration-300">
+            {/* Sync Banner for non-logged in users */}
+            {!user && (
+                <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 rounded-2xl p-4 text-white shadow-lg shadow-indigo-100 flex items-center justify-between">
+                    <div>
+                        <h4 className="text-sm font-bold flex items-center gap-2">
+                            <Cloud className="w-4 h-4 text-indigo-200" />
+                            雲端同步尚未開啟
+                        </h4>
+                        <p className="text-[10px] text-indigo-100 mt-1">登入後即可備份所有記帳明細，不怕手機遺失。</p>
+                    </div>
+                    <button 
+                        onClick={() => setAppState(AppState.AUTH)}
+                        className="px-3 py-1.5 bg-white text-indigo-600 rounded-lg text-[10px] font-bold shadow-sm"
+                    >
+                        立即同步
+                    </button>
+                </div>
+            )}
+
             <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 shadow-sm">
                 <div className="p-2 bg-slate-100 rounded-lg text-slate-500">
                     <Calculator className="w-5 h-5" />
                 </div>
                 <div className="flex-1">
-                    <label className="text-xs font-bold text-slate-500 block mb-0.5">匯率設定 (Leave empty for 0.25)</label>
+                    <label className="text-xs font-bold text-slate-500 block mb-0.5">匯率設定</label>
                     <input 
                         type="number" 
                         step="0.001" 
@@ -171,8 +225,8 @@ const App: React.FC = () => {
                />
                <FeatureCard 
                  icon={<Sparkles className="w-4 h-4 text-pink-500" />}
-                 title="自動翻譯"
-                 desc="日文品名轉繁體中文"
+                 title="AI 自動辨識"
+                 desc="Gemini Nano 強大辨識"
                />
             </div>
           </div>
@@ -188,12 +242,30 @@ const App: React.FC = () => {
                     }}
                     onUpdateHistory={setHistoryList}
                     onBack={() => setAppState(AppState.IDLE)}
+                    isSyncing={isSyncing}
                 />
             </div>
         )}
 
         {appState === AppState.STATS && (
             <div className="py-6">
+                <div className="px-4 mb-2">
+                   {user && (
+                        <div className="bg-green-50 border border-green-100 rounded-xl p-3 flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2 text-green-700">
+                                <CloudCheck className="w-4 h-4" />
+                                <span className="text-xs font-bold">雲端帳號已連線: {user.name}</span>
+                            </div>
+                            <button 
+                                onClick={() => handleSync(user.id)}
+                                disabled={isSyncing}
+                                className="p-1.5 hover:bg-green-100 rounded-full text-green-600 transition-all active:rotate-180"
+                            >
+                                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                            </button>
+                        </div>
+                   )}
+                </div>
                 <StatsView history={historyList} />
             </div>
         )}
@@ -212,7 +284,7 @@ const App: React.FC = () => {
                             setReceiptData(null);
                         }}
                         onDelete={(id) => {
-                            const updated = deleteFromHistory(id);
+                            const updated = deleteFromHistory(id, user?.id);
                             setHistoryList(updated);
                             setAppState(AppState.HISTORY);
                         }}
