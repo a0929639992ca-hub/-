@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { ReceiptAnalysis } from '../types';
-import { Trash2, ShoppingBag, Clock, Cloud, Check, Loader2 } from 'lucide-react';
-import { deleteFromHistory } from '../services/historyService';
+import { Trash2, ShoppingBag, Clock, Cloud, Check, Loader2, Save, Download, UploadCloud, ShieldCheck } from 'lucide-react';
+import { deleteFromHistory, exportToICloud, importFromICloud } from '../services/historyService';
 
 interface HistoryListProps {
   history: ReceiptAnalysis[];
@@ -12,6 +12,7 @@ interface HistoryListProps {
 }
 
 export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onUpdateHistory, onBack, isSyncing }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -26,13 +27,65 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
     return firstItem ? firstItem.store : 'Store';
   };
 
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const newList = await importFromICloud(file);
+        onUpdateHistory(newList);
+        alert('還原成功！');
+      } catch (err) {
+        alert('匯入失敗，請確認檔案格式是否正確。');
+      }
+    }
+  };
+
   return (
     <div className="w-full max-w-md mx-auto animate-fade-in pb-20">
-      <div className="flex items-center justify-between mb-6 px-2">
-        <h2 className="text-xl font-bold text-slate-800">歷史消費紀錄</h2>
-        <div className="flex items-center gap-2">
-            {isSyncing && <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin" />}
-            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">共 {history.length} 筆</span>
+      <div className="px-2 mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xl font-bold text-slate-800">歷史消費紀錄</h2>
+          <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">共 {history.length} 筆</span>
+        </div>
+        
+        {/* iCloud 雲端同步區塊 */}
+        <div className="bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-2xl p-4 shadow-sm mt-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-white rounded-lg shadow-sm">
+                <Cloud className="w-4 h-4 text-indigo-600" />
+              </div>
+              <span className="text-xs font-bold text-slate-700">iCloud 備份管理</span>
+            </div>
+            {isSyncing ? (
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-500 bg-white px-2 py-0.5 rounded-full border border-indigo-100 animate-pulse">
+                <Loader2 className="w-3 h-3 animate-spin" /> 同步中
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-green-500 bg-white px-2 py-0.5 rounded-full border border-green-100">
+                <ShieldCheck className="w-3 h-3" /> 已加密備份
+              </div>
+            )}
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <button 
+              onClick={exportToICloud}
+              className="flex items-center justify-center gap-2 py-2.5 bg-white border border-indigo-100 rounded-xl text-xs font-bold text-indigo-600 shadow-sm active:scale-95 transition"
+            >
+              <Download className="w-3.5 h-3.5" /> 備份至 iCloud
+            </button>
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center justify-center gap-2 py-2.5 bg-white border border-indigo-100 rounded-xl text-xs font-bold text-indigo-600 shadow-sm active:scale-95 transition"
+            >
+              <UploadCloud className="w-3.5 h-3.5" /> 從 iCloud 還原
+            </button>
+            <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImport} />
+          </div>
+          <p className="text-[9px] text-slate-400 mt-3 leading-relaxed">
+            * 匯出檔案可手動存儲於 iCloud Drive，確保您的消費紀錄在更換手機時也能輕鬆還原。
+          </p>
         </div>
       </div>
 

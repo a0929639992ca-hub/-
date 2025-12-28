@@ -1,4 +1,3 @@
-
 import { ReceiptAnalysis } from "../types";
 import { getCurrentUser } from "./authService";
 
@@ -9,35 +8,6 @@ const STORAGE_KEYS = {
   VERSION: '1.3'
 };
 
-/**
- * Get storage statistics including size and count of records.
- */
-export const getStorageStats = () => {
-  const user = getCurrentUser();
-  const key = user ? `${STORAGE_KEYS.CLOUD_PREFIX}${user.id}` : STORAGE_KEYS.CURRENT_LOCAL;
-  let count = 0;
-  try {
-    const data = localStorage.getItem(key);
-    count = data ? JSON.parse(data).length : 0;
-  } catch (e) {
-    count = 0;
-  }
-  
-  const size = localStorage.getItem(key) ? (new Blob([localStorage.getItem(key)!]).size / 1024).toFixed(2) : '0';
-  
-  return {
-    key,
-    sizeKb: size,
-    count,
-    mode: user ? '雲端帳號模式' : '本地儲存模式',
-    username: user?.name,
-    version: STORAGE_KEYS.VERSION
-  };
-};
-
-/**
- * Get history of receipts, handling legacy migration.
- */
 export const getHistory = (): ReceiptAnalysis[] => {
   const user = getCurrentUser();
   const storageKey = user ? `${STORAGE_KEYS.CLOUD_PREFIX}${user.id}` : STORAGE_KEYS.CURRENT_LOCAL;
@@ -74,9 +44,6 @@ export const getHistory = (): ReceiptAnalysis[] => {
   return history.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 };
 
-/**
- * Sync local data to cloud storage for a specific user.
- */
 export const syncLocalToCloud = async (userId: string): Promise<ReceiptAnalysis[]> => {
   // 模擬網路延遲
   await new Promise(resolve => setTimeout(resolve, 1500));
@@ -100,9 +67,6 @@ export const syncLocalToCloud = async (userId: string): Promise<ReceiptAnalysis[
   return mergedList;
 };
 
-/**
- * Save a new receipt analysis to history.
- */
 export const saveReceiptToHistory = (data: ReceiptAnalysis): ReceiptAnalysis => {
   const user = getCurrentUser();
   const storageKey = user ? `${STORAGE_KEYS.CLOUD_PREFIX}${user.id}` : STORAGE_KEYS.CURRENT_LOCAL;
@@ -120,9 +84,6 @@ export const saveReceiptToHistory = (data: ReceiptAnalysis): ReceiptAnalysis => 
   return newRecord;
 };
 
-/**
- * Delete a receipt from history by ID.
- */
 export const deleteFromHistory = (id: string): ReceiptAnalysis[] => {
   const user = getCurrentUser();
   const storageKey = user ? `${STORAGE_KEYS.CLOUD_PREFIX}${user.id}` : STORAGE_KEYS.CURRENT_LOCAL;
@@ -132,9 +93,7 @@ export const deleteFromHistory = (id: string): ReceiptAnalysis[] => {
   return updated;
 };
 
-/**
- * iCloud 備份匯出功能 - Exports history as a JSON file.
- */
+// iCloud 備份匯出功能
 export const exportToICloud = () => {
   const data = getHistory();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -146,9 +105,7 @@ export const exportToICloud = () => {
   URL.revokeObjectURL(url);
 };
 
-/**
- * iCloud 備份匯入功能 - Imports history from a JSON file.
- */
+// iCloud 備份匯入功能
 export const importFromICloud = (file: File): Promise<ReceiptAnalysis[]> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -175,39 +132,4 @@ export const importFromICloud = (file: File): Promise<ReceiptAnalysis[]> => {
     };
     reader.readAsText(file);
   });
-};
-
-/**
- * Export history data as a JSON string.
- */
-export const exportHistoryData = (): string => {
-  return JSON.stringify({
-    version: STORAGE_KEYS.VERSION,
-    data: getHistory(),
-    exportDate: new Date().toISOString()
-  }, null, 2);
-};
-
-/**
- * Import history data from a JSON string.
- */
-export const importHistoryData = (jsonString: string): ReceiptAnalysis[] => {
-  try {
-    const parsed = JSON.parse(jsonString);
-    const dataToImport = Array.isArray(parsed) ? parsed : (parsed.data || []);
-    const user = getCurrentUser();
-    const storageKey = user ? `${STORAGE_KEYS.CLOUD_PREFIX}${user.id}` : STORAGE_KEYS.CURRENT_LOCAL;
-    const currentHistory = getHistory();
-    
-    const mergedMap = new Map<string, ReceiptAnalysis>();
-    [...currentHistory, ...dataToImport].forEach(item => {
-      if (item.id) mergedMap.set(item.id, { ...item, userId: user?.id });
-    });
-    
-    const mergedList = Array.from(mergedMap.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    localStorage.setItem(storageKey, JSON.stringify(mergedList));
-    return mergedList;
-  } catch (e) {
-    throw new Error("格式錯誤，無法還原");
-  }
 };

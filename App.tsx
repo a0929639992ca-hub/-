@@ -1,15 +1,16 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { CameraCapture } from './components/CameraCapture';
 import { ResultView } from './components/ResultView';
 import { LoadingScreen } from './components/LoadingScreen';
 import { HistoryList } from './components/HistoryList';
 import { StatsView } from './components/StatsView';
 import { AuthView } from './components/AuthView';
+import { DateRangeFilter } from './components/DateRangeFilter';
 import { translateReceipt } from './services/geminiService';
 import { saveReceiptToHistory, getHistory, deleteFromHistory, syncLocalToCloud } from './services/historyService';
 import { getCurrentUser, logout } from './services/authService';
 import { AppState, ReceiptAnalysis, User } from './types';
-import { AlertCircle, History, Calculator, PieChart, ScanLine, User as UserIcon, Check, RefreshCw, ArrowLeft } from 'lucide-react';
+import { AlertCircle, History, Calculator, PieChart, ScanLine, User as UserIcon, Check, RefreshCw, Cloud, CloudOff, CloudSync } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
@@ -21,6 +22,10 @@ const App: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [historyList, setHistoryList] = useState<ReceiptAnalysis[]>([]);
   const [customRate, setCustomRate] = useState<string>('');
+  
+  // 時間區間篩選狀態
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   const initializeApp = useCallback(async () => {
     const currentUser = getCurrentUser();
@@ -44,6 +49,17 @@ const App: React.FC = () => {
     setTimeout(() => setShowToast(false), 3000);
   };
 
+  // 根據日期篩選後的歷史紀錄
+  const filteredHistory = useMemo(() => {
+    return historyList.filter(item => {
+      if (!startDate && !endDate) return true;
+      const itemDate = item.date; // YYYY-MM-DD
+      if (startDate && itemDate < startDate) return false;
+      if (endDate && itemDate > endDate) return false;
+      return true;
+    });
+  }, [historyList, startDate, endDate]);
+
   const handleCapture = useCallback(async (imageData: string) => {
     setCapturedImage(imageData);
     setAppState(AppState.ANALYZING);
@@ -66,13 +82,18 @@ const App: React.FC = () => {
       setReceiptData(savedRecord);
       setAppState(AppState.RESULT);
       triggerToast();
+
+      if (user) {
+        setIsSyncing(true);
+        syncLocalToCloud(user.id).then(() => setIsSyncing(false));
+      }
       
     } catch (err) {
       console.error("Analysis Failed:", err);
       setErrorMsg(err instanceof Error ? err.message : "辨識發生異常，請重試");
       setAppState(AppState.ERROR);
     }
-  }, [customRate]);
+  }, [customRate, user]);
 
   const handleLogout = () => {
     if (confirm('確定要登出嗎？資料將保留於雲端。')) {
@@ -83,7 +104,8 @@ const App: React.FC = () => {
   };
 
   const showBottomNav = [AppState.IDLE, AppState.HISTORY, AppState.STATS].includes(appState);
-  const totalSpent = (historyList || []).reduce((sum, item) => sum + (item.totalTwd || 0), 0);
+  // 計算總金額也應隨篩選變動
+  const totalSpent = filteredHistory.reduce((sum, item) => sum + (item.totalTwd || 0), 0);
 
   return (
     <div className="min-h-screen bg-[#FDFDFD] text-slate-900 font-sans relative overflow-x-hidden">
@@ -110,9 +132,18 @@ const App: React.FC = () => {
                     </div>
                     <div className="flex flex-col leading-none">
                         <h1 className="text-sm font-bold text-slate-800">日本購物記帳</h1>
-                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
-                            {user ? user.name : 'LOCAL MODE'}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                              {user ? user.name : 'LOCAL MODE'}
+                          </span>
+                          {user ? (
+                            isSyncing ? 
+                            <CloudSync className="w-2 h-2 text-indigo-500 animate-spin" /> : 
+                            <Cloud className="w-2 h-2 text-green-500" />
+                          ) : (
+                            <CloudOff className="w-2 h-2 text-slate-300" />
+                          )}
+                        </div>
                     </div>
                 </div>
                 
@@ -139,8 +170,10 @@ const App: React.FC = () => {
           <AuthView 
             onLoginSuccess={(u) => {
               setUser(u);
+              setIsSyncing(true);
               syncLocalToCloud(u.id).then(() => {
                   setHistoryList(getHistory());
+                  setIsSyncing(false);
                   setAppState(AppState.IDLE);
               });
             }} 
@@ -166,6 +199,19 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {(appState === AppState.HISTORY || appState === AppState.STATS) && (
+          <div className="px-4 pt-4 sticky top-14 z-30 bg-[#FDFDFD]/90 backdrop-blur-sm pb-2 border-b border-slate-50">
+            <DateRangeFilter 
+              startDate={startDate} 
+              endDate={endDate} 
+              onRangeChange={(start, end) => {
+                setStartDate(start);
+                setEndDate(end);
+              }} 
+            />
+          </div>
+        )}
+
         {appState === AppState.ERROR && (
             <div className="px-6 py-12 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
                 <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6">
@@ -182,11 +228,11 @@ const App: React.FC = () => {
         )}
 
         {appState === AppState.HISTORY && (
-            <div className="py-6 px-2">
+            <div className="py-2 px-2">
                 <HistoryList 
-                    history={historyList}
+                    history={filteredHistory}
                     onSelect={(item) => { setReceiptData(item); setAppState(AppState.RESULT); }}
-                    onUpdateHistory={(newList) => { setHistoryList(newList); }}
+                    onUpdateHistory={(newList) => { setHistoryList(getHistory()); }} // 更新時重抓完整清單
                     onBack={() => setAppState(AppState.IDLE)}
                     isSyncing={isSyncing}
                 />
@@ -194,8 +240,8 @@ const App: React.FC = () => {
         )}
 
         {appState === AppState.STATS && (
-            <div className="py-6">
-                <StatsView history={historyList} />
+            <div className="py-2">
+                <StatsView history={filteredHistory} />
             </div>
         )}
 
@@ -208,7 +254,7 @@ const App: React.FC = () => {
                         originalImage={capturedImage}
                         data={receiptData} 
                         onRetake={() => { setAppState(AppState.IDLE); setCapturedImage(null); setReceiptData(null); }}
-                        onDelete={(id) => { const updated = deleteFromHistory(id); setHistoryList(updated); setAppState(AppState.HISTORY); }}
+                        onDelete={(id) => { deleteFromHistory(id); setHistoryList(getHistory()); setAppState(AppState.HISTORY); }}
                     />
                 </div>
             </div>
