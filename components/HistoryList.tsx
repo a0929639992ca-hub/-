@@ -13,10 +13,10 @@ interface HistoryListProps {
 
 export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onUpdateHistory, onBack, isSyncing }) => {
   
-  const handleDelete = (e: React.MouseEvent, id: string, userId?: string) => {
+  const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (confirm('確定要刪除這筆紀錄嗎？雲端備份也將同步刪除。')) {
-      const updated = deleteFromHistory(id, userId);
+      const updated = deleteFromHistory(id);
       onUpdateHistory(updated);
     }
   };
@@ -29,14 +29,10 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
   return (
     <div className="w-full max-w-md mx-auto animate-fade-in pb-20">
       <div className="flex items-center justify-between mb-6 px-2">
-        <h2 className="text-xl font-bold text-slate-800">
-          歷史消費紀錄
-        </h2>
+        <h2 className="text-xl font-bold text-slate-800">歷史消費紀錄</h2>
         <div className="flex items-center gap-2">
             {isSyncing && <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin" />}
-            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
-                共 {history.length} 筆
-            </span>
+            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">共 {history.length} 筆</span>
         </div>
       </div>
 
@@ -46,13 +42,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
             <ShoppingBag className="w-8 h-8 text-slate-300" />
           </div>
           <h3 className="text-base font-bold text-slate-700 mb-1">目前沒有紀錄</h3>
-          <p className="text-xs text-slate-400 mb-6">掃描後明細將自動備份至雲端</p>
-          <button 
-             onClick={onBack}
-             className="px-6 py-2 bg-indigo-600 text-white rounded-full text-sm font-bold shadow-lg shadow-indigo-200"
-          >
-             去掃描
-          </button>
+          <button onClick={onBack} className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-full text-sm font-bold shadow-lg">去掃描</button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -70,40 +60,30 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
                           </span>
                            {record.time && (
                             <span className="text-xs font-medium text-slate-500 font-mono flex items-center gap-0.5">
-                                <Clock className="w-3 h-3" />
-                                {record.time}
+                                <Clock className="w-3 h-3" /> {record.time}
                             </span>
                           )}
                           {record.userId && (
-                              <div className="flex items-center text-green-500">
-                                <Cloud className="w-3 h-3" />
-                                <Check className="w-2 h-2 ml-[-4px] mt-[4px]" />
+                              <div className="flex items-center text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                <Cloud className="w-2.5 h-2.5 mr-1" />
+                                雲端同步
                               </div>
                           )}
                       </div>
-                      <div className="text-sm font-bold text-slate-700 truncate max-w-[140px]">
-                              {getStoreName(record)}
-                      </div>
+                      <div className="text-sm font-bold text-slate-700 truncate max-w-[140px]">{getStoreName(record)}</div>
                       <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                          <ShoppingBag className="w-3 h-3" /> 
-                          {record.items.length} 筆商品
+                          <ShoppingBag className="w-3 h-3" /> {record.items.length} 筆商品
                       </span>
                   </div>
 
                   <div className="flex flex-col items-end">
-                      <div className="text-lg font-bold text-slate-800 font-mono">
-                          NT$ {record.totalTwd.toLocaleString()}
-                      </div>
-                      {record.totalJpy && (
-                          <div className="text-[10px] text-slate-400 font-mono">
-                              ¥{record.totalJpy.toLocaleString()}
-                          </div>
-                      )}
+                      <div className="text-lg font-bold text-slate-800 font-mono">NT$ {record.totalTwd.toLocaleString()}</div>
+                      {record.totalJpy && <div className="text-[10px] text-slate-400 font-mono">¥{record.totalJpy.toLocaleString()}</div>}
                   </div>
               </div>
                 
               <button
-                  onClick={(e) => handleDelete(e, record.id!, record.userId)}
+                  onClick={(e) => handleDelete(e, record.id!)}
                   className="absolute bottom-2 right-2 p-2 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
               >
                   <Trash2 className="w-4 h-4" />
