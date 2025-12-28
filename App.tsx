@@ -9,7 +9,7 @@ import { translateReceipt } from './services/geminiService';
 import { saveReceiptToHistory, getHistory, deleteFromHistory, syncLocalToCloud } from './services/historyService';
 import { getCurrentUser, logout } from './services/authService';
 import { AppState, ReceiptAnalysis, User } from './types';
-import { ScrollText, Sparkles, History, Calculator, PieChart, ScanLine, ShoppingBag, User as UserIcon, Cloud, Check, Upload, RefreshCw, Database } from 'lucide-react';
+import { AlertCircle, History, Calculator, PieChart, ScanLine, User as UserIcon, Check, RefreshCw, ArrowLeft } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
@@ -55,40 +55,36 @@ const App: React.FC = () => {
       const parsedRate = parseFloat(customRate);
       if (!isNaN(parsedRate) && parsedRate > 0) rateToSend = parsedRate;
 
+      // 執行分析
       const result = await translateReceipt(base64Data, 'image/jpeg', rateToSend);
       
-      if (!result || !result.items) {
-        throw new Error("辨識失敗，AI 未能取得商品清單，請再試一次。");
+      if (!result || !result.items || result.items.length === 0) {
+        throw new Error("辨識結果為空。請確認照片中包含收據商品清單。");
       }
 
-      const now = new Date();
-      if (!result.date || result.date === "未知") result.date = now.toISOString().split('T')[0];
-      if (!result.time || result.time === "未知") result.time = now.toTimeString().split(' ')[0].slice(0, 5);
-
+      // 儲存並更新狀態
       const savedRecord = saveReceiptToHistory(result);
-      
-      // 確保資料已設定才切換畫面
       setHistoryList(getHistory());
       setReceiptData(savedRecord);
       setAppState(AppState.RESULT);
       triggerToast();
       
     } catch (err) {
-      console.error("Capture Process Error:", err);
-      setErrorMsg(err instanceof Error ? err.message : "發生未知錯誤");
+      console.error("Critical Analysis Error:", err);
+      setErrorMsg(err instanceof Error ? err.message : "發生未知錯誤，請重試");
       setAppState(AppState.ERROR);
     }
   }, [customRate]);
 
   const handleLogout = () => {
-    if (confirm('確定要登出嗎？資料將保留在雲端，切換回本地模式。')) {
+    if (confirm('確定要登出嗎？資料將保留在雲端。')) {
       logout();
       initializeApp();
       setAppState(AppState.IDLE);
     }
   };
 
-  const showBottomNav = [AppState.IDLE, AppState.HISTORY, AppState.STATS, AppState.ERROR].includes(appState);
+  const showBottomNav = [AppState.IDLE, AppState.HISTORY, AppState.STATS].includes(appState);
   const totalSpent = (historyList || []).reduce((sum, item) => sum + (item.totalTwd || 0), 0);
 
   return (
@@ -116,17 +112,15 @@ const App: React.FC = () => {
                     </div>
                     <div className="flex flex-col leading-none">
                         <h1 className="text-base font-bold text-slate-800">日本購物記帳</h1>
-                        <div className="flex items-center gap-1 mt-0.5">
-                            <span className={`text-[9px] font-bold uppercase tracking-tighter ${user ? 'text-indigo-600' : 'text-slate-400'}`}>
-                                {user ? `Member: ${user.name}` : 'Local Device Mode'}
-                            </span>
-                        </div>
+                        <span className={`text-[9px] font-bold uppercase tracking-tighter ${user ? 'text-indigo-600' : 'text-slate-400'}`}>
+                            {user ? `Member: ${user.name}` : 'Local Mode'}
+                        </span>
                     </div>
                 </div>
                 
                 <div className="flex items-center gap-2">
                     {user ? (
-                        <button onClick={handleLogout} className="w-8 h-8 rounded-full bg-white flex items-center justify-center border border-slate-200 text-slate-500 shadow-sm">
+                        <button onClick={handleLogout} className="w-8 h-8 rounded-full bg-white flex items-center justify-center border border-slate-200 text-slate-500">
                             <UserIcon className="w-4 h-4" />
                         </button>
                     ) : (
@@ -156,8 +150,8 @@ const App: React.FC = () => {
           />
         )}
 
-        {(appState === AppState.IDLE || appState === AppState.ERROR) && (
-          <div className="px-4 py-6 flex flex-col gap-5">
+        {appState === AppState.IDLE && (
+          <div className="px-4 py-6 flex flex-col gap-5 animate-in fade-in duration-300">
             <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 shadow-sm">
                 <div className="p-2 bg-slate-100 rounded-lg text-slate-500"><Calculator className="w-5 h-5" /></div>
                 <div className="flex-1">
@@ -168,12 +162,27 @@ const App: React.FC = () => {
             <div className="relative shadow-2xl rounded-3xl overflow-hidden ring-4 ring-white">
                 <CameraCapture onCapture={handleCapture} />
             </div>
-            {appState === AppState.ERROR && (
-                <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-center text-sm font-bold animate-in zoom-in-95 duration-200">
-                    {errorMsg}
-                </div>
-            )}
           </div>
+        )}
+
+        {appState === AppState.ERROR && (
+            <div className="px-6 py-20 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+                <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6">
+                    <AlertCircle className="w-10 h-10" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-3">辨識發生錯誤</h2>
+                <div className="bg-red-50 border border-red-100 p-4 rounded-xl mb-8 w-full">
+                    <p className="text-sm text-red-600 font-medium leading-relaxed">{errorMsg}</p>
+                </div>
+                <div className="flex flex-col gap-3 w-full">
+                    <button onClick={() => setAppState(AppState.IDLE)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2">
+                        <RefreshCw className="w-5 h-5" /> 重新拍攝
+                    </button>
+                    <button onClick={() => setAppState(AppState.HISTORY)} className="w-full py-4 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold flex items-center justify-center gap-2">
+                        <ArrowLeft className="w-5 h-5" /> 查看歷史紀錄
+                    </button>
+                </div>
+            </div>
         )}
 
         {appState === AppState.HISTORY && (
@@ -213,7 +222,7 @@ const App: React.FC = () => {
       {showBottomNav && (
         <div className="fixed bottom-0 left-0 w-full z-40 bg-white border-t border-slate-200 pb-safe">
             <div className="max-w-md mx-auto flex justify-around items-center">
-                <NavButton active={appState === AppState.IDLE || appState === AppState.ERROR} onClick={() => setAppState(AppState.IDLE)} icon={ScanLine} label="掃描" />
+                <NavButton active={appState === AppState.IDLE} onClick={() => setAppState(AppState.IDLE)} icon={ScanLine} label="掃描" />
                 <NavButton active={appState === AppState.HISTORY} onClick={() => setAppState(AppState.HISTORY)} icon={History} label="紀錄" />
                 <NavButton active={appState === AppState.STATS} onClick={() => setAppState(AppState.STATS)} icon={PieChart} label="統計" />
             </div>

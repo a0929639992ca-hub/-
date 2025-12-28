@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { Camera, Upload, RefreshCw, ScanLine } from 'lucide-react';
+import { Camera, Upload, RefreshCw } from 'lucide-react';
 
 interface CameraCaptureProps {
   onCapture: (imageData: string) => void;
@@ -10,62 +10,23 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture }) => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleStream = (stream: MediaStream) => {
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.onloadedmetadata = () => {
-        videoRef.current?.play().catch(e => console.error("Play error:", e));
-        setIsStreaming(true);
-      };
-    }
-  };
-
   const startCamera = useCallback(async () => {
     setError(null);
-    setIsStreaming(false);
-
-    // Stop any existing tracks
-    if (videoRef.current && videoRef.current.srcObject) {
-       const oldStream = videoRef.current.srcObject as MediaStream;
-       oldStream.getTracks().forEach(track => track.stop());
-    }
-
     try {
-      // Attempt 1: Try High Resolution (Best for OCR)
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          }
-        });
-        handleStream(stream);
-        return;
-      } catch (err) {
-        console.warn("High-res camera failed, trying standard...", err);
-      }
-
-      // Attempt 2: Try Standard Environment Camera (Most phones support this)
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' }
-        });
-        handleStream(stream);
-        return;
-      } catch (err) {
-        console.warn("Environment facing failed, trying fallback...", err);
-      }
-
-      // Attempt 3: Fallback to any available video source
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1280 }, // 提升至 1280px 確保 OCR 精度
+          height: { ideal: 720 }
+        }
       });
-      handleStream(stream);
-
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        setIsStreaming(true);
+      }
     } catch (err) {
-      console.error("All camera attempts failed:", err);
-      setError("無法啟動相機。請確認瀏覽器已允許相機權限，或改用「上傳照片」功能。");
+      setError("無法啟動相機，請檢查權限或使用上傳功能。");
     }
   }, []);
 
@@ -79,54 +40,33 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture }) => {
   }, []);
 
   useEffect(() => {
-    // Add a small delay to ensure DOM is ready and prevent race conditions on some mobile browsers
-    const timer = setTimeout(() => {
-      startCamera();
-    }, 200);
-    
-    return () => {
-      clearTimeout(timer);
-      stopCamera();
-    };
+    startCamera();
+    return () => stopCamera();
   }, [startCamera, stopCamera]);
 
-  // Image resizing logic to speed up API processing
-  const processAndCaptureImage = (source: HTMLVideoElement | HTMLImageElement) => {
-    // Aggressively reduced to 800px to minimize token usage and avoid 429 Quota errors
-    const MAX_DIMENSION = 800; 
-    let width = source instanceof HTMLVideoElement ? source.videoWidth : source.width;
-    let height = source instanceof HTMLVideoElement ? source.videoHeight : source.height;
-
-    // Sanity check for dimensions
-    if (width === 0 || height === 0) {
-        // Fallback dimensions if video isn't ready
-        width = 1280;
-        height = 720;
-    }
-
-    // Calculate new dimensions
-    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
-      const ratio = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
-      width *= ratio;
-      height *= ratio;
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    
-    const context = canvas.getContext('2d');
-    if (context) {
-      context.drawImage(source, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      stopCamera();
-      onCapture(dataUrl);
-    }
-  };
-
   const capturePhoto = () => {
-    if (videoRef.current) {
-      processAndCaptureImage(videoRef.current);
+    if (videoRef.current && isStreaming) {
+      const canvas = document.createElement('canvas');
+      const video = videoRef.current;
+      
+      // 保持原始比例但限制寬度
+      const maxWidth = 1280;
+      let width = video.videoWidth;
+      let height = video.videoHeight;
+      
+      if (width > maxWidth) {
+        height = (maxWidth / width) * height;
+        width = maxWidth;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        onCapture(dataUrl); // 先傳出資料，App.tsx 狀態切換後 useEffect 會自動 stopCamera
+      }
     }
   };
 
@@ -137,7 +77,18 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture }) => {
       reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
-          processAndCaptureImage(img);
+            const canvas = document.createElement('canvas');
+            const maxWidth = 1280;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxWidth) {
+                height = (maxWidth / width) * height;
+                width = maxWidth;
+            }
+            canvas.width = width;
+            canvas.height = height;
+            canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
+            onCapture(canvas.toDataURL('image/jpeg', 0.8));
         };
         img.src = event.target?.result as string;
       };
@@ -146,8 +97,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture }) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center w-full aspect-[3/4] max-h-[500px] bg-slate-900 rounded-3xl overflow-hidden relative shadow-2xl ring-1 ring-slate-900/5">
-      {/* Video Preview */}
+    <div className="flex flex-col items-center justify-center w-full aspect-[3/4] bg-slate-900 rounded-3xl overflow-hidden relative shadow-2xl">
       <video
         ref={videoRef}
         autoPlay
@@ -156,92 +106,56 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture }) => {
         className={`w-full h-full object-cover ${!isStreaming ? 'hidden' : 'block'}`}
       />
 
-      {/* Scanning Frame Overlay */}
       {isStreaming && (
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
-            <div className="w-full h-3/4 max-w-sm border-2 border-white/50 rounded-2xl relative">
-                {/* Corners */}
-                <div className="absolute -top-0.5 -left-0.5 w-6 h-6 border-t-4 border-l-4 border-indigo-500 rounded-tl-xl"></div>
-                <div className="absolute -top-0.5 -right-0.5 w-6 h-6 border-t-4 border-r-4 border-indigo-500 rounded-tr-xl"></div>
-                <div className="absolute -bottom-0.5 -left-0.5 w-6 h-6 border-b-4 border-l-4 border-indigo-500 rounded-bl-xl"></div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-6 h-6 border-b-4 border-r-4 border-indigo-500 rounded-br-xl"></div>
-                
-                {/* Scan Line Animation */}
-                <div className="absolute left-0 right-0 h-0.5 bg-indigo-500/80 shadow-[0_0_15px_rgba(99,102,241,0.5)] animate-scan-line top-1/2"></div>
-                
-                <div className="absolute bottom-4 left-0 right-0 text-center">
-                    <span className="bg-black/40 text-white/90 text-xs px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
-                        對準收據自動對焦
-                    </span>
-                </div>
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+            <div className="w-4/5 h-2/3 border-2 border-white/30 rounded-2xl relative">
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-indigo-500 -mt-1 -ml-1 rounded-tl-lg"></div>
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-indigo-500 -mt-1 -mr-1 rounded-tr-lg"></div>
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-indigo-500 -mb-1 -ml-1 rounded-bl-lg"></div>
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-indigo-500 -mb-1 -mr-1 rounded-br-lg"></div>
+                <div className="absolute inset-x-0 h-0.5 bg-indigo-500/50 shadow-[0_0_15px_indigo] animate-scan-line"></div>
             </div>
         </div>
       )}
 
-      {/* Placeholder / Error State */}
-      {!isStreaming && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 p-6 text-center bg-slate-800">
-          {error ? (
-            <div className="flex flex-col items-center">
-                <p className="text-red-400 mb-4 bg-red-900/20 px-4 py-2 rounded-lg border border-red-900/30">{error}</p>
-                <button
-                    onClick={startCamera}
-                    className="flex items-center gap-2 text-white bg-indigo-600 px-6 py-2.5 rounded-full hover:bg-indigo-700 transition font-medium shadow-lg shadow-indigo-900/20"
-                >
-                    <RefreshCw className="w-4 h-4" />
-                    <span>重試相機</span>
-                </button>
-            </div>
-          ) : (
-            <div className="animate-pulse flex flex-col items-center">
-              <div className="p-4 bg-slate-700/50 rounded-full mb-4">
-                  <Camera className="w-8 h-8 opacity-70" />
-              </div>
-              <p className="font-medium">啟動相機中...</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Controls Overlay */}
-      <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex flex-col items-center gap-6">
-        
-        {/* Shutter Button */}
+      <div className="absolute bottom-0 inset-x-0 p-8 bg-gradient-to-t from-black/80 to-transparent flex flex-col items-center gap-6">
         {isStreaming && (
-          <button
-            onClick={capturePhoto}
-            className="group relative w-20 h-20 rounded-full flex items-center justify-center transition-all active:scale-95"
-            aria-label="Take photo"
-          >
-            <div className="absolute inset-0 rounded-full border-4 border-white/30 group-hover:border-white/50 transition-colors"></div>
-            <div className="w-16 h-16 bg-white rounded-full shadow-[0_0_20px_rgba(255,255,255,0.3)] group-hover:scale-90 transition-transform duration-200" />
-          </button>
+          <button onClick={capturePhoto} className="w-16 h-16 bg-white rounded-full border-4 border-white/30 shadow-xl active:scale-90 transition-transform"></button>
         )}
-
-        <div className="flex items-center gap-6 mt-2">
-           {/* File Upload Alternative */}
-          <label className="flex items-center gap-2 text-white/90 cursor-pointer bg-white/10 px-5 py-2.5 rounded-full hover:bg-white/20 transition backdrop-blur-md border border-white/10 active:scale-95">
+        <label className="flex items-center gap-2 text-white/90 bg-white/10 backdrop-blur-md px-5 py-2.5 rounded-full border border-white/20 cursor-pointer hover:bg-white/20 transition">
             <Upload className="w-4 h-4" />
-            <span className="text-sm font-medium">上傳照片</span>
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleFileUpload}
-            />
-          </label>
-        </div>
+            <span className="text-sm font-bold">上傳照片</span>
+            <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+        </label>
       </div>
-      
+
+      {!isStreaming && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-slate-400">
+              {error ? (
+                  <div className="flex flex-col items-center gap-4">
+                      <p className="text-red-400 text-sm font-bold">{error}</p>
+                      <button onClick={startCamera} className="bg-indigo-600 text-white px-6 py-2 rounded-full text-xs font-bold flex items-center gap-2">
+                        <RefreshCw className="w-4 h-4" /> 重新啟動相機
+                      </button>
+                  </div>
+              ) : (
+                  <div className="animate-pulse flex flex-col items-center gap-3">
+                      <Camera className="w-10 h-10 opacity-50" />
+                      <p className="text-sm">正在啟動相機元件...</p>
+                  </div>
+              )}
+          </div>
+      )}
+
       <style>{`
         @keyframes scan-line {
             0% { top: 10%; opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
+            50% { opacity: 1; }
             100% { top: 90%; opacity: 0; }
         }
         .animate-scan-line {
-            animation: scan-line 2.5s ease-in-out infinite;
+            animation: scan-line 3s linear infinite;
+            position: absolute;
         }
       `}</style>
     </div>

@@ -1,37 +1,30 @@
 import { GoogleGenAI } from "@google/genai";
 import { ReceiptAnalysis } from "../types";
 
-// 使用使用者要求的 Nano Banana 系列模型 (2.5 Flash Image)
+// 使用使用者要求的 Nano Banana 系列模型
 const MODEL_NAME = 'gemini-2.5-flash-image';
 
 const cleanJsonString = (text: string): string => {
   if (!text) return "";
-  // 優先尋找 Markdown JSON 區塊
-  const match = text.match(/```json([\s\S]*?)```/);
-  if (match) return match[1].trim();
-  
-  // 次之尋找第一個 { 和最後一個 } 之間的內容
-  const firstBrace = text.indexOf('{');
-  const lastBrace = text.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace !== -1) {
-    return text.substring(firstBrace, lastBrace + 1).trim();
-  }
-  
+  // 移除可能存在的 Markdown 代碼區塊標記
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) return jsonMatch[0].trim();
   return text.trim();
 };
 
 async function retryWithBackoff<T>(
   operation: () => Promise<T>,
-  retries: number = 3, 
+  retries: number = 2, 
   delay: number = 2000 
 ): Promise<T> {
   try {
     return await operation();
   } catch (error: any) {
-    const isRetryable = error?.status === 429 || error?.code === 429 || error?.status === 503;
-    if (retries > 0 && isRetryable) {
+    const status = error?.status || error?.code;
+    // 429: Too Many Requests, 503: Service Unavailable
+    if (retries > 0 && (status === 429 || status === 503 || status === 500)) {
       await new Promise(resolve => setTimeout(resolve, delay));
-      return retryWithBackoff(operation, retries - 1, delay * 2);
+      return retryWithBackoff(operation, retries - 1, delay * 1.5);
     }
     throw error;
   }
@@ -44,36 +37,30 @@ export const translateReceipt = async (
 ): Promise<ReceiptAnalysis> => {
   try {
     const apiKey = process.env.API_KEY;
-    if (!apiKey) throw new Error("API Key 遺失，請檢查設定。");
-    const ai = new GoogleGenAI({ apiKey: apiKey });
+    if (!apiKey) throw new Error("API Key 未設定");
+    
+    const ai = new GoogleGenAI({ apiKey });
     const targetRate = manualRate || 0.25;
 
-    const prompt = `你是一個精通日文與中文的收據分析專家。請分析這張日本收據照片，並產出台灣繁體中文報告。
-       
-       規則：
-       1. 轉換紀年：R6 或 令和6年代表 2024, R7 或 令和7年代表 2025。
-       2. 使用匯率：${targetRate}。
-       3. 類別限定：[精品香氛, 伴手禮, 美妝保養, 藥品保健, 食品調味, 零食雜貨, 服飾配件, 3C家電, 其他]。
-       
-       請回傳 JSON 格式，結構如下：
-       {
-         "exchangeRate": ${targetRate},
-         "date": "YYYY-MM-DD",
-         "time": "HH:MM",
-         "totalJpy": 數字,
-         "totalTwd": 數字,
-         "items": [
-           {
-             "category": "類別",
-             "store": "商店名",
-             "name": "中文品名",
-             "originalName": "日文原名",
-             "priceTwd": 數字,
-             "originalPriceJpy": 數字,
-             "note": "備註"
-           }
-         ]
-       }`;
+    const prompt = `你是一個收據辨識助手。請分析圖片中的日本收據，並嚴格依照以下 JSON 格式回傳（僅回傳 JSON 物件）：
+    {
+      "exchangeRate": ${targetRate},
+      "date": "YYYY-MM-DD",
+      "time": "HH:MM",
+      "totalJpy": 數字,
+      "totalTwd": 數字,
+      "items": [
+        {
+          "category": "精品香氛/伴手禮/美妝保養/藥品保健/食品調味/零食雜貨/服飾配件/3C家電/其他",
+          "store": "商店名",
+          "name": "中文品名",
+          "originalName": "日文原名",
+          "priceTwd": 數字,
+          "originalPriceJpy": 數字,
+          "note": ""
+        }
+      ]
+    }`;
 
     const response = await retryWithBackoff(async () => {
         return await ai.models.generateContent({
@@ -84,60 +71,51 @@ export const translateReceipt = async (
                   { text: prompt }
                 ],
             },
+            config: {
+                temperature: 0.1, // 降低隨機性
+                responseMimeType: "application/json"
+            }
         });
     });
 
     const text = response.text || "";
     const cleaned = cleanJsonString(text);
-    if (!cleaned) throw new Error("AI 回覆內容無法解析，請重新拍攝。");
+    if (!cleaned) throw new Error("AI 未能產出有效內容");
 
     const parsed = JSON.parse(cleaned) as ReceiptAnalysis;
     
-    // 防禦性檢查：確保 items 存在且為陣列
-    if (!parsed.items || !Array.isArray(parsed.items)) {
-      parsed.items = [];
+    // 強制補全核心欄位，避免 UI 崩潰
+    if (!parsed.items || !Array.isArray(parsed.items)) parsed.items = [];
+    if (!parsed.totalTwd) {
+        parsed.totalTwd = parsed.items.reduce((sum, item) => sum + (item.priceTwd || 0), 0);
     }
-    
-    // 確保數值正確
-    parsed.totalTwd = parsed.totalTwd || 0;
+    if (!parsed.totalJpy) {
+        parsed.totalJpy = parsed.items.reduce((sum, item) => sum + (item.originalPriceJpy || 0), 0);
+    }
     parsed.exchangeRate = parsed.exchangeRate || targetRate;
+    parsed.date = parsed.date || new Date().toISOString().split('T')[0];
 
     return parsed;
   } catch (error: any) {
-    console.error("Translation Error:", error);
+    console.error("Gemini Service Error:", error);
+    if (error.message?.includes("JSON")) {
+        throw new Error("AI 回傳格式錯誤，請確保收據完整且文字清晰後重拍。");
+    }
     throw error;
   }
 };
 
-/**
- * 帳號會員專屬：AI 消費分析
- */
 export const generateShoppingReport = async (history: ReceiptAnalysis[]): Promise<string> => {
   try {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) throw new Error("API Key 遺失。");
-    const ai = new GoogleGenAI({ apiKey: apiKey });
-
-    const summaryData = history.map(h => ({
-      date: h.date,
-      totalTwd: h.totalTwd,
-      categories: h.items?.map(i => i.category) || []
-    }));
-
-    const prompt = `
-      你是一位專業的日本旅遊消費顧問。以下是使用者的購物紀錄：
-      ${JSON.stringify(summaryData)}
-      請產出一份約 200 字的「消費性格報告」，包含消費型態、節奏與建議。用台灣繁體中文，親切幽默並多用 Emoji。
-    `;
-
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const summary = history.slice(0, 10).map(h => `${h.date}: 消費 NT$${h.totalTwd}`).join('\n');
+    const prompt = `基於以下消費紀錄，寫一段親切幽默的分析報告（200字內）：\n${summary}`;
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: prompt,
     });
-
-    return response.text || "報告生成失敗。";
+    return response.text || "無法生成報告";
   } catch (err) {
-    console.error(err);
-    return "AI 報告生成失敗，請稍後再試。";
+    return "分析暫時無法使用";
   }
 };
