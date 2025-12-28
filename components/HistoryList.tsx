@@ -1,6 +1,6 @@
 import React from 'react';
 import { ReceiptAnalysis } from '../types';
-import { Trash2, ShoppingBag, Clock, CloudCheck, Loader2 } from 'lucide-react';
+import { Trash2, ShoppingBag, Clock, Cloud, Check, Loader2 } from 'lucide-react';
 import { deleteFromHistory } from '../services/historyService';
 
 interface HistoryListProps {
@@ -75,7 +75,10 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onU
                             </span>
                           )}
                           {record.userId && (
-                              <CloudCheck className="w-3 h-3 text-green-500" title="已同步至雲端" />
+                              <div className="flex items-center text-green-500">
+                                <Cloud className="w-3 h-3" />
+                                <Check className="w-2 h-2 ml-[-4px] mt-[4px]" />
+                              </div>
                           )}
                       </div>
                       <div className="text-sm font-bold text-slate-700 truncate max-w-[140px]">

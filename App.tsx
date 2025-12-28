@@ -9,7 +9,7 @@ import { translateReceipt } from './services/geminiService';
 import { saveReceiptToHistory, getHistory, deleteFromHistory, syncLocalToCloud } from './services/historyService';
 import { getCurrentUser, logout } from './services/authService';
 import { AppState, ReceiptAnalysis, User } from './types';
-import { ScrollText, Sparkles, History, Calculator, PieChart, ScanLine, ShoppingBag, User as UserIcon, Cloud, CloudCheck, CloudUpload, RefreshCw } from 'lucide-react';
+import { ScrollText, Sparkles, History, Calculator, PieChart, ScanLine, ShoppingBag, User as UserIcon, Cloud, Check, Upload, RefreshCw } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
@@ -137,7 +137,7 @@ const App: React.FC = () => {
                             onClick={() => setAppState(AppState.AUTH)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-100 rounded-full text-indigo-600 transition-all hover:bg-indigo-100"
                         >
-                            <CloudUpload className="w-3.5 h-3.5" />
+                            <Upload className="w-3.5 h-3.5" />
                             <span className="text-[10px] font-bold">啟動雲端</span>
                         </button>
                     )}
@@ -253,7 +253,7 @@ const App: React.FC = () => {
                    {user && (
                         <div className="bg-green-50 border border-green-100 rounded-xl p-3 flex items-center justify-between mb-4">
                             <div className="flex items-center gap-2 text-green-700">
-                                <CloudCheck className="w-4 h-4" />
+                                <Check className="w-4 h-4" />
                                 <span className="text-xs font-bold">雲端帳號已連線: {user.name}</span>
                             </div>
                             <button 
